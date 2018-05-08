@@ -1417,8 +1417,21 @@ vr_rxeof(struct vr_softc *sc)
 			device_printf(sc->vr_dev, "%s: receive error = 0x%b\n",
 			    __func__, rxstat & 0xff, VR_RXSTAT_ERR_BITS);
 #endif
+#ifdef NETGRPAH
+			if (sc->vr_tap_hook != NULL) {
+				if ((rxstat & VR_RXSTAT_CRCERR) 
+					!= VR_RXSTAT_CRCERR) {
+					vr_discard_rxbuf(rxd);
+					continue;	
+				}
+			} else {
+				vr_discard_rxbuf(rxd);
+				continue;
+			}
+#else
 			vr_discard_rxbuf(rxd);
 			continue;
+#endif /* ! NETGRAPH */
 		}
 
 		if (vr_newbuf(sc, cons) != 0) {
