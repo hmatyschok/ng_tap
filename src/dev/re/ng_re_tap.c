@@ -44,13 +44,13 @@
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
 #include <netgraph/ng_parse.h>
-#include <dev/vr/if_vrreg.h>
-#include <dev/vr/ng_vr_tap.h>
+#include <dev/rl/if_rlreg.h>
+#include <dev/re/ng_re_tap.h>
 
-static const struct ng_cmdlist vr_tap_cmdlist[] = {
+static const struct ng_cmdlist re_tap_cmdlist[] = {
 	{
-	  NGM_VR_TAP_COOKIE,
-	  NGM_VR_TAP_GET_IFNAME,
+	  NGM_RE_TAP_COOKIE,
+	  NGM_RE_TAP_GET_IFNAME,
 	  "getifname",
 	  NULL,
 	  &ng_parse_string_type
@@ -62,37 +62,37 @@ static const struct ng_cmdlist vr_tap_cmdlist[] = {
  * Declarations for netgraph(9) methods.
  */
 
-static ng_constructor_t	vr_tap_constructor;
-static ng_rcvmsg_t	vr_tap_rcvmsg;
-static ng_shutdown_t	vr_tap_shutdown;
-static ng_newhook_t	vr_tap_newhook;
-static ng_rcvdata_t	vr_tap_rcvdata;	 
-static ng_connect_t	vr_tap_connect;
-static ng_disconnect_t	vr_tap_disconnect;
+static ng_constructor_t	re_tap_constructor;
+static ng_rcvmsg_t	re_tap_rcvmsg;
+static ng_shutdown_t	re_tap_shutdown;
+static ng_newhook_t	re_tap_newhook;
+static ng_rcvdata_t	re_tap_rcvdata;	 
+static ng_connect_t	re_tap_connect;
+static ng_disconnect_t	re_tap_disconnect;
 
 /*
  * Implements netgraph(4) node types. 
  */
 
-static struct ng_type vr_tap_type = {
+static struct ng_type re_tap_type = {
 	.version =	NG_ABI_VERSION,
-	.name =		NG_VR_TAP_NODE_TYPE,
+	.name =		NG_RE_TAP_NODE_TYPE,
 	.mod_event =	NULL,
-	.constructor =	vr_tap_constructor,
-	.rcvmsg =	vr_tap_rcvmsg,
-	.shutdown =	vr_tap_shutdown,
-	.newhook =	vr_tap_newhook,
-	.rcvdata =	vr_tap_rcvdata,
-	.connect = 	vr_tap_connect,
-	.disconnect =	vr_tap_disconnect,
-	.cmdlist =	vr_tap_cmdlist,
+	.constructor =	re_tap_constructor,
+	.rcvmsg =	re_tap_rcvmsg,
+	.shutdown =	re_tap_shutdown,
+	.newhook =	re_tap_newhook,
+	.rcvdata =	re_tap_rcvdata,
+	.connect = 	re_tap_connect,
+	.disconnect =	re_tap_disconnect,
+	.cmdlist =	re_tap_cmdlist,
 };
 
 /* 
- * Instances are constructed by vr_tap_attach(9) are persistent. 
+ * Instances are constructed by re_tap_attach(9) are persistent. 
  */
 static int 
-vr_tap_constructor(node_p node) 
+re_tap_constructor(node_p node) 
 {
 	return (EINVAL); 
 }
@@ -101,7 +101,7 @@ vr_tap_constructor(node_p node)
  * This is a persistent netgraph(4) node.
  */
 static int 
-vr_tap_shutdown(node_p node)
+re_tap_shutdown(node_p node)
 {
 	if ((node->nd_flags & NGF_REALLY_DIE) == 0)
 		node->nd_flags &= ~NGF_INVALID; 
@@ -110,23 +110,23 @@ vr_tap_shutdown(node_p node)
 }
 
 /*
- * Inverse element for vr_tap_disconnect(9).
+ * Inverse element for re_tap_disconnect(9).
  */
 static int 
-vr_tap_newhook(node_p node, hook_p hook, const char *name)
+re_tap_newhook(node_p node, hook_p hook, const char *name)
 {
-	struct vr_softc *sc = NG_NODE_PRIVATE(node);
-	struct ifnet *ifp = sc->vr_ifp;
+	struct rl_softc *sc = NG_NODE_PRIVATE(node);
+	struct ifnet *ifp = sc->rl_ifp;
 		
-	if (strcmp(name, NG_VR_TAP_HOOK_RAW) != 0) 
+	if (strcmp(name, NG_RE_TAP_HOOK_RAW) != 0) 
 		return (EPFNOSUPPORT);
 	
-	if (sc->vr_tap_hook != NULL) 
+	if (sc->rl_tap_hook != NULL) 
 		return (EISCONN);
 
-	VR_LOCK(sc);
-	sc->vr_tap_hook = hook;
-	VR_UNLOCK(sc);
+	RL_LOCK(sc);
+	sc->rl_tap_hook = hook;
+	RL_UNLOCK(sc);
 	
 	return (ifpromisc(ifp, 1));
 }
@@ -135,7 +135,7 @@ vr_tap_newhook(node_p node, hook_p hook, const char *name)
  * Fallback mechanism for rejecting the connection request.
  */
 static int 
-vr_tap_connect(hook_p hook)
+re_tap_connect(hook_p hook)
 {
 	NG_HOOK_FORCE_QUEUE(NG_HOOK_PEER(hook));
 
@@ -148,11 +148,11 @@ vr_tap_connect(hook_p hook)
  * pass into layer above and demultiplex. 
  */
 static int 
-vr_tap_rcvdata(hook_p hook, item_p item)
+re_tap_rcvdata(hook_p hook, item_p item)
 {
 	const node_p node = NG_HOOK_NODE(hook);
-	struct vr_softc *sc = NG_NODE_PRIVATE(node);
- 	struct ifnet *ifp = sc->vr_ifp;
+	struct rl_softc *sc = NG_NODE_PRIVATE(node);
+ 	struct ifnet *ifp = sc->rl_ifp;
 	struct mbuf *m;
  	
 	NGI_GET_M(item, m);
@@ -181,18 +181,18 @@ vr_tap_rcvdata(hook_p hook, item_p item)
  * Process control message.
  */
 static int
-vr_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)
+re_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)
 {
-	struct vr_softc *sc = NG_NODE_PRIVATE(node);
+	struct rl_softc *sc = NG_NODE_PRIVATE(node);
 	struct ng_mesg *resp = NULL, *msg;
 	int error;
 
 	NGI_GET_MSG(item, msg);
 
 	switch (msg->header.typecookie) {
-	case NGM_VR_TAP_COOKIE:
+	case NGM_RE_TAP_COOKIE:
 		switch (msg->header.cmd) {
-		case NGM_VR_TAP_GET_IFNAME:
+		case NGM_RE_TAP_GET_IFNAME:
 			NG_MKRESPONSE(resp, msg, IFNAMSIZ, M_NOWAIT);
 
 			if (resp == NULL) {
@@ -201,7 +201,7 @@ vr_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)
 			}
 	
 			(void)snprintf(resp->data, IFNAMSIZ, 
-				"%s", sc->vr_ifp->if_xname);
+				"%s", sc->rl_ifp->if_xname);
 
 			error = 0;
 			break;
@@ -220,18 +220,18 @@ vr_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)
 }
 
 /*
- * Inverse element for vr_tap_connect(9).
+ * Inverse element for re_tap_connect(9).
  */
 static int 
-vr_tap_disconnect(hook_p hook)
+re_tap_disconnect(hook_p hook)
 {
 	const node_p node = NG_HOOK_NODE(hook);
-	struct vr_softc *sc = NG_NODE_PRIVATE(node);
-	struct ifnet *ifp = sc->vr_ifp;
+	struct rl_softc *sc = NG_NODE_PRIVATE(node);
+	struct ifnet *ifp = sc->rl_ifp;
 
-	VR_LOCK(sc);
-	sc->vr_tap_hook = NULL;
-	VR_UNLOCK(sc);
+	RL_LOCK(sc);
+	sc->rl_tap_hook = NULL;
+	RL_UNLOCK(sc);
 	
 	return (ifpromisc(ifp, 0));
 }
@@ -239,56 +239,56 @@ vr_tap_disconnect(hook_p hook)
 /* Service primitives. */
 
 /* 
- * Attach instance of vr(4) with netgraph(4) node.
+ * Attach instance of re(4) with netgraph(4) node.
  * 
  * It is called once for each physical card during 
- * vr_attach(9). 
+ * re_attach(9). 
  * 
- * This is effectively vr_tap_constructor(9).
+ * This is effectively re_tap_constructor(9).
  */
 int 
-vr_tap_attach(struct vr_softc *sc)
+re_tap_attach(struct rl_softc *sc)
 {
 	char name[IFNAMSIZ];
 	struct ifnet *ifp;
 	int error;
 
-	if (vr_tap_type.refs == 0) {
-		if ((error = ng_newtype(&vr_tap_type)) != 0) {
+	if (re_tap_type.refs == 0) {
+		if ((error = ng_newtype(&re_tap_type)) != 0) {
 			(void)printf("%s: ng_newtype() failed; "
 				"error %d\n", __func__, error);
 			goto out;
 		}
 	} else 
-		atomic_add_int(&vr_tap_type.refs, 1);
+		atomic_add_int(&re_tap_type.refs, 1);
 		
-	error = ng_make_node_common(&vr_tap_type, &sc->vr_tap_node);
+	error = ng_make_node_common(&re_tap_type, &sc->rl_tap_node);
 	if (error != 0) {
 		(void)printf("%s: ng_make_node_common() failed; "
 				"error %d\n", __func__, error);
 		goto bad;
 	}
-	ifp = sc->vr_ifp;
+	ifp = sc->rl_ifp;
 	
 	(void)snprintf(name, IFNAMSIZ, "%s%d", 
-		vr_tap_type.name, ifp->if_index);
+		re_tap_type.name, ifp->if_index);
 	
-	if ((error = ng_name_node(sc->vr_tap_node, name)) != 0) {
+	if ((error = ng_name_node(sc->rl_tap_node, name)) != 0) {
 		(void)printf("%s: ng_name_node() failed; "
 				"error %d\n", __func__, error);
 		goto bad1;
 	}
-	NG_NODE_SET_PRIVATE(sc->vr_tap_node, sc);
+	NG_NODE_SET_PRIVATE(sc->rl_tap_node, sc);
 out:		
 	return (error);
 	
 bad1:
-	NG_NODE_UNREF(sc->vr_tap_node);
+	NG_NODE_UNREF(sc->rl_tap_node);
 bad:	
-	if (vr_tap_type.refs == 1)
-		ng_rmtype(&vr_tap_type);
+	if (re_tap_type.refs == 1)
+		ng_rmtype(&re_tap_type);
 	else 
-		atomic_subtract_int(&vr_tap_type.refs, 1);
+		atomic_subtract_int(&re_tap_type.refs, 1);
 		
 	goto out;
 }
@@ -297,23 +297,23 @@ bad:
  * Detach from the netgraph(4) domain(9).
  * 
  * It is called once for each physical card 
- * during vr_detach(9) or during rl_attach(9) 
+ * during re_detach(9) or during re_attach(9) 
  * as exeception handling, if something went 
  * wrong. 
  * 
- * This is effectively vr_tap_destructor(9).
+ * This is effectively re_tap_destructor(9).
  */
 void 
-vr_tap_detach(struct vr_softc *sc)
+re_tap_detach(struct rl_softc *sc)
 {	
-	if (NG_NODE_PRIVATE(sc->vr_tap_node)) {
-		ng_rmnode_self(sc->vr_tap_node);
-		NG_NODE_UNREF(sc->vr_tap_node);
+	if (NG_NODE_PRIVATE(sc->rl_tap_node)) {
+		ng_rmnode_self(sc->rl_tap_node);
+		NG_NODE_UNREF(sc->rl_tap_node);
 			
-		if (vr_tap_type.refs == 1)
-			ng_rmtype(&vr_tap_type);
+		if (re_tap_type.refs == 1)
+			ng_rmtype(&re_tap_type);
 		else 
-			atomic_subtract_int(&vr_tap_type.refs, 1);
+			atomic_subtract_int(&re_tap_type.refs, 1);
 	}
 }
 
@@ -323,7 +323,7 @@ vr_tap_detach(struct vr_softc *sc)
  * to the netgraph(4) protocol domain(9).
  */
 void
-vr_tap_input(hook_p hook, struct mbuf **mp)
+re_tap_input(hook_p hook, struct mbuf **mp)
 {
 	int off, error;
 	struct mbuf *t;

@@ -490,27 +490,30 @@ vr_set_filter(struct vr_softc *sc)
 	ifp = sc->vr_ifp;
 	rxfilt = CSR_READ_1(sc, VR_RXCFG);
 #ifdef NETGRAPH
-	rxfilt &= ~(VR_RXCFG_RX_ERRPKTS | VR_RXCFG_RX_PROMISC | 
-		VR_RXCFG_RX_BROAD |
-	    VR_RXCFG_RX_MULTI);
+	rxfilt &= ~(VR_RXCFG_RX_ERRPKTS 
+		| VR_RXCFG_RX_PROMISC 
+		| VR_RXCFG_RX_BROAD 
+		| VR_RXCFG_RX_MULTI);
 #else
-	rxfilt &= ~(VR_RXCFG_RX_PROMISC | VR_RXCFG_RX_BROAD |
-	    VR_RXCFG_RX_MULTI);
+	rxfilt &= ~(VR_RXCFG_RX_PROMISC 
+		| VR_RXCFG_RX_BROAD 
+		| VR_RXCFG_RX_MULTI);
 #endif /* ! NETGRAPH */
 	if (ifp->if_flags & IFF_BROADCAST)
 		rxfilt |= VR_RXCFG_RX_BROAD;
 	if (ifp->if_flags & IFF_ALLMULTI || ifp->if_flags & IFF_PROMISC) {
 		rxfilt |= VR_RXCFG_RX_MULTI;
-#ifdef NETGRAPH
+
 		if (ifp->if_flags & IFF_PROMISC) {
 			rxfilt |= VR_RXCFG_RX_PROMISC;
+#ifdef NETGRAPH
 			if (sc->vr_tap_hook != NULL)
 				rxfilt |= VR_RXCFG_RX_ERRPKTS;
+#endif /* NETGRAPH */
 		}
-#else
 		if (ifp->if_flags & IFF_PROMISC)
 			rxfilt |= VR_RXCFG_RX_PROMISC;
-#endif /* ! NETGRAPH */
+
 		CSR_WRITE_1(sc, VR_RXCFG, rxfilt);
 		CSR_WRITE_4(sc, VR_MAR0, 0xFFFFFFFF);
 		CSR_WRITE_4(sc, VR_MAR1, 0xFFFFFFFF);
@@ -1360,10 +1363,7 @@ vr_rxeof(struct vr_softc *sc)
 	rx_npkts = 0;
 
 #ifdef NETGRAPH	
-	if (sc->vr_tap_hook == NULL)	
-		ether_crc_len = ETHER_CRC_LEN;
-	else
-		ether_crc_len = 0;
+	ether_crc_len = (sc->vr_tap_hook == NULL) ? ETHER_CRC_LEN : 0;
 #endif 	/* !NETGRAPH */
 
 	bus_dmamap_sync(sc->vr_cdata.vr_rx_ring_tag,

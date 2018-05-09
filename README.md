@@ -7,14 +7,14 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
  capable passing Ethernet frames with trailer into kernel space
  of FreeBSD Operating System.   
    
-  This software is highly experimental, but not tested, yet.  
+  This software is highly experimental, but _not_ tested, yet.  
    
  The implementaion of the targeted device driver was extented by 
  the implementaionof a so called netgraph(4) node. It's an object 
  oriented framework for implementing messege-passing within and
  between nodes of netgraph(4) domain(9). 
  
-  Only the vr(4) device is supported, but this may change.
+  Only the vr(4) and re(4) devices are supported, but this may change.
   
 Legal Notice: 
 -------------
@@ -23,7 +23,9 @@ Legal Notice:
 
   (b) VIA Rhine is a trademark of VIA Technologies Inc.
   
-  (c) Don't use this software on production systems!
+  (c) Realtek is a trademark of Realtek Semiconductor Corp.
+  
+  (d) Don't use this software on production systems!
   
 Additional information about contacting
 ---------------------------------------

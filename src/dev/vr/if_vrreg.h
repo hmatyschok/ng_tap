@@ -767,10 +767,6 @@ struct vr_softc {
 #endif
 	struct task		vr_inttask;
 #ifdef NETGRAPH
-/*
- * Service Acces Point [SAP] for Network Terminal 
- * Access Point [TAP] on netgraph(4) domain(9). 
- */
 	node_p 	vr_tap_node;
 	hook_p 	vr_tap_hook;
 #endif /* NETGRAPH */		
