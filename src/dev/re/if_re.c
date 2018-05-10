@@ -3656,7 +3656,8 @@ re_watchdog(struct rl_softc *sc)
 static void
 re_stop(struct rl_softc *sc)
 {
-	int			i, rxfilt;
+	int			i;
+	uint32_t 	rxfilt;
 	struct ifnet		*ifp;
 	struct rl_txdesc	*txd;
 	struct rl_rxdesc	*rxd;

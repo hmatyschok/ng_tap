@@ -14,7 +14,8 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
  oriented framework for implementing messege-passing within and
  between nodes of netgraph(4) domain(9). 
  
-  Only the vr(4) and re(4) devices are supported, but this may change.
+  Only the device-driver for vr(4), re(4) and rl(4) devices are 
+  supported, but this may change.
   
 Legal Notice: 
 -------------
