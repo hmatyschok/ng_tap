@@ -3246,16 +3246,18 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
 	struct mbuf *m;
 	struct ifnet *ifp;
 	struct msk_rxdesc *rxd;
+#ifdef NETGRAPH	
 	int msk_max_framelen;
+#endif /* NETGRAPH */
 	int cons, rxlen;
 	
 	ifp = sc_if->msk_ifp;
 
 	MSK_IF_LOCK_ASSERT(sc_if);
-
-	msk_max_framelen = MSK_MAX_FRAMELEN;
-
+	
 #ifdef NETGRAPH
+	msk_max_framelen = MSK_JUMBO_FRAMELEN - ETHER_HDR_LEN;
+	
 	if (sc_if->msk_tap_hook != NULL) 
 		msk_max_framelen += ETHER_CRC_LEN;	 
 #endif /* NETGRAPH */
@@ -3272,11 +3274,19 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
 			 * just do minimal check and let upper stack
 			 * handle this frame.
 			 */
+#ifdef NETGRAPH	
 			if (len > msk_max_framelen || len < ETHER_HDR_LEN) {
 				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 				msk_discard_rxbuf(sc_if, cons);
 				break;
 			}
+#else
+			if (len > MSK_MAX_FRAMELEN || len < ETHER_HDR_LEN) {
+				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+				msk_discard_rxbuf(sc_if, cons);
+				break;
+			}
+#endif /* ! NETGRAPH */			
 		} else if (len > sc_if->msk_framesize ||
 		    ((status & GMR_FS_ANY_ERR) != 0) ||
 		    ((status & GMR_FS_RX_OK) == 0) || (rxlen != len)) {
