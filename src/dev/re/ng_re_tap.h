@@ -40,8 +40,9 @@ enum {
 };
 
 /* Service primitives */
+#ifdef _KERNEL
 int 	re_tap_attach(struct rl_softc *);
 void 	re_tap_detach(struct rl_softc *);
 void 	re_tap_input(hook_p, struct mbuf **);
-
+#endif /* _KERNEL */
 #endif /* _RE_NG_RE_TAP_H_ */

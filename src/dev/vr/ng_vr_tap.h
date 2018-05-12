@@ -40,8 +40,9 @@ enum {
 };
 
 /* Service primitives */
+#ifdef _KERNEL
 int 	vr_tap_attach(struct vr_softc *);
 void 	vr_tap_detach(struct vr_softc *);
 void 	vr_tap_input(hook_p, struct mbuf **);
-
+#endif /* _KERNEL */
 #endif /* _VR_NG_VR_TAP_H_ */

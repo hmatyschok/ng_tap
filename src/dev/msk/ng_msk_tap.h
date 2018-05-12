@@ -40,8 +40,9 @@ enum {
 };
 
 /* Service primitives */
+#ifdef _KERNEL
 int 	msk_tap_attach(struct msk_if_softc *);
 void 	msk_tap_detach(struct msk_if_softc *);
 void 	msk_tap_input(hook_p, struct mbuf **);
-
+#endif /* _KERNEL */
 #endif /* _MSK_NG_MSK_TAP_H_ */
