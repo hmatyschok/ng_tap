@@ -239,7 +239,7 @@ msk_tap_disconnect(hook_p hook)
 /* Service primitives. */
 
 /* 
- * Attach instance of vr(4) with netgraph(4) node.
+ * Attach instance of msk(4) with netgraph(4) node.
  * 
  * It is called once for each physical card during 
  * vr_attach(9). 
@@ -325,13 +325,17 @@ msk_tap_detach(struct msk_if_softc *sc_if)
 void
 msk_tap_input(hook_p hook, struct mbuf **mp)
 {
+	struct mbuf *t, *m;
 	int off, error;
-	struct mbuf *t;
+
+	m = *mp; 
+	off = m->m_pkthdr.len - ETHER_CRC_LEN;
 	
-	off = (*mp)->m_pkthdr.len - ETHER_CRC_LEN;
-	
-	if ((t = m_split(*mp, off, M_NOWAIT)) != NULL) {
-		m_cat(*mp, t);
+	if ((t = m_split(m, off, M_NOWAIT)) != NULL) {
+		while (m->m_next != NULL)
+			m = m->m_next;
+		
+		m->m_next = t;
 /* 
  * Sets *mp = NULL.
  */			

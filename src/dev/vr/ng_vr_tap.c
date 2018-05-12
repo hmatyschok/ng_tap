@@ -325,13 +325,17 @@ vr_tap_detach(struct vr_softc *sc)
 void
 vr_tap_input(hook_p hook, struct mbuf **mp)
 {
+	struct mbuf *t, *m;
 	int off, error;
-	struct mbuf *t;
+
+	m = *mp; 
+	off = m->m_pkthdr.len - ETHER_CRC_LEN;
 	
-	off = (*mp)->m_pkthdr.len - ETHER_CRC_LEN;
-	
-	if ((t = m_split(*mp, off, M_NOWAIT)) != NULL) {
-		m_cat(*mp, t);
+	if ((t = m_split(m, off, M_NOWAIT)) != NULL) {
+		while (m->m_next != NULL)
+			m = m->m_next;
+		
+		m->m_next = t;
 /* 
  * Sets *mp = NULL.
  */			

@@ -3359,8 +3359,8 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
 }
 
 static void
-msk_jumbo_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
-    int len)
+msk_jumbo_rxeof(struct msk_if_softc *sc_if, uint32_t status, 
+	uint32_t control, int len)
 {
 	struct mbuf *m;
 	struct ifnet *ifp;
