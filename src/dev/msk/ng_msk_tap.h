@@ -31,18 +31,4 @@
 #define NG_MSK_TAP_NODE_TYPE 	"msk_tap"
 #define NGM_MSK_TAP_COOKIE		1526076921 	/* date -u +'%s' */
 
-/* Hook names */
-#define NG_MSK_TAP_HOOK_RAW 	"raw" /* connection to raw device */
-
-/* Netgraph control messages */
-enum {
-	NGM_MSK_TAP_GET_IFNAME = 1,
-};
-
-/* Service primitives */
-#ifdef _KERNEL
-int 	msk_tap_attach(struct msk_if_softc *);
-void 	msk_tap_detach(struct msk_if_softc *);
-void 	msk_tap_input(hook_p, struct mbuf **);
-#endif /* _KERNEL */
 #endif /* _MSK_NG_MSK_TAP_H_ */

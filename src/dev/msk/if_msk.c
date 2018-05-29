@@ -171,11 +171,14 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/msk/if_msk.c 298955 2016-05-03 03:41:25Z
 #ifdef NETGRAPH
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
 #endif
 #include <dev/msk/if_mskreg.h>
 #ifdef NETGRAPH
 #include <dev/msk/ng_msk_tap.h>
-#endif
+#include <netgraph/ng_tap.h>
+NG_TAP_MODULE(MSK_IF, msk, msk_if_softc, NG_MSK_TAP_NODE_TYPE, NGM_MSK_TAP_COOKIE);
+#endif /* NETGRAPH */
 
 MODULE_DEPEND(msk, pci, 1, 1, 1);
 MODULE_DEPEND(msk, ether, 1, 1, 1);
@@ -297,7 +300,7 @@ static void mskc_reset(struct msk_softc *);
 
 static int msk_probe(device_t);
 static int msk_attach(device_t);
-static int msk_detach(device_t);
+ static int msk_detach(device_t);
 
 static void msk_tick(void *);
 static void msk_intr(void *);
@@ -1767,7 +1770,7 @@ msk_attach(device_t dev)
 
 #ifdef NETGRAPH  
 	if (error == 0) 
-		error = msk_tap_attach(sc_if);
+		error = ng_msk_tap_attach(sc_if);
 #endif /* NETGRAPH */
 
 
@@ -2081,7 +2084,7 @@ msk_detach(device_t dev)
 	MSK_IF_LOCK(sc_if);
 
 #ifdef NETGRAPH  
-	msk_tap_detach(sc_if);
+	ng_msk_tap_detach(sc_if);
 #endif /* NETGRAPH */
 
 	ifp = sc_if->msk_ifp;
@@ -3342,7 +3345,7 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
  */		
 #ifdef NETGRAPH
 		if (sc_if->msk_tap_hook != NULL) {
-			msk_tap_input(sc_if->msk_tap_hook, &m);
+			ng_msk_tap_input(sc_if->msk_tap_hook, &m);
 			if (m != NULL) {
 				(*ifp->if_input)(ifp, m);
 			}
@@ -3432,7 +3435,7 @@ msk_jumbo_rxeof(struct msk_if_softc *sc_if, uint32_t status,
  */		
 #ifdef NETGRAPH
 		if (sc_if->msk_tap_hook != NULL) {
-			msk_tap_input(sc_if->msk_tap_hook, &m);
+			ng_msk_tap_input(sc_if->msk_tap_hook, &m);
 			if (m != NULL) {
 				(*ifp->if_input)(ifp, m);
 			}
