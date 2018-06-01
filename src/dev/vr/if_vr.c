@@ -132,10 +132,13 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/vr/if_vr.c 296272 2016-03-01 17:47:32Z j
 #ifdef NETGRAPH
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
 #endif
 #include <dev/vr/if_vrreg.h>
 #ifdef NETGRAPH
 #include <dev/vr/ng_vr_tap.h>
+#include <netgraph/ng_tap.h>
+NG_TAP_MODULE(VR, vr, vr_softc, NG_VR_TAP_NODE_TYPE, NGM_VR_TAP_COOKIE);
 #endif
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
@@ -856,7 +859,7 @@ vr_attach(device_t dev)
 
 #ifdef NETGRAPH  
 	if (error == 0) 
-		error = vr_tap_attach(sc);
+		error = ng_vr_tap_attach(sc);
 #endif /* NETGRAPH */
 
 fail:
@@ -882,7 +885,7 @@ vr_detach(device_t dev)
 	KASSERT(mtx_initialized(&sc->vr_mtx), ("vr mutex not initialized"));
 
 #ifdef NETGRAPH  
-	vr_tap_detach(sc);
+	ng_vr_tap_detach(sc);
 #endif /* NETGRAPH */
 
 #ifdef DEVICE_POLLING
@@ -1363,7 +1366,10 @@ vr_rxeof(struct vr_softc *sc)
 	rx_npkts = 0;
 
 #ifdef NETGRAPH	
-	ether_crc_len = (sc->vr_tap_hook == NULL) ? ETHER_CRC_LEN : 0;
+/*
+ * If hook is connected, the CRC32 based FCS shall not removed.
+ */
+	ether_crc_len = (sc->vr_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
 #endif 	/* !NETGRAPH */
 
 	bus_dmamap_sync(sc->vr_cdata.vr_rx_ring_tag,
@@ -1424,6 +1430,11 @@ vr_rxeof(struct vr_softc *sc)
 					vr_discard_rxbuf(rxd);
 					continue;	
 				}
+/*
+ * The Ethernet frame shall not discarded, if CRC 
+ * error condition halts and hook is connected, but
+ * this event shall recorded.
+ */ 				
 			} else {
 				vr_discard_rxbuf(rxd);
 				continue;
@@ -1490,7 +1501,7 @@ vr_rxeof(struct vr_softc *sc)
  */		
 #ifdef NETGRAPH
 		if (sc->vr_tap_hook != NULL) {
-			vr_tap_input(sc->vr_tap_hook, &m);
+			ng_vr_tap_input(sc->vr_tap_hook, &m);
 			if (m != NULL) {
 				(*ifp->if_input)(ifp, m);
 			}

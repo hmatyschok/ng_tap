@@ -52,7 +52,7 @@ static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = { 	\
 }; 																\
 
 /* 
- * Instances are constructed by device_tap_attach(9) are persistent. 
+ * Instances are constructed by ng_xxx_tap_attach(9) are persistent. 
  */
 #define NG_TAP_CONSTRUCTOR_DECLARE(device) \
 static int 														\
@@ -75,9 +75,9 @@ ng_##device##_tap_shutdown(node_p node) 						\
 }
 
 /*
- * Inverse element for ng_device_tap_disconnect(9).
+ * Inverse element for ng_xxx_tap_disconnect(9).
  */
-#define NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx) 					\
+#define NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx) 				\
 static int 														\
 ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 { 																\
@@ -189,9 +189,9 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 }
 
 /*
- * Inverse element for ng_device_tap_connect(9).
+ * Inverse element for ng_xxx_tap_connect(9).
  */
-#define NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx) 					\
+#define NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx) 			\
 static int 														\
 ng_##device##_tap_disconnect(hook_p hook) 						\
 { 																\
@@ -227,7 +227,7 @@ static struct ng_type ng_##device##_tap_type = { 				\
 /* Service primitives. */
 
 /* 
- * Attach instance of msk(4) with netgraph(4) node.
+ * Attach instance of xxx(4) with netgraph(4) node.
  * 
  * It is called once for each physical card during 
  * device_attach(9). 
@@ -250,10 +250,10 @@ ng_##device##_tap_attach(struct ctx *sc) 						\
 			goto out; 											\
 		} 														\
 	} else 														\
-		atomic_add_int(&ng_##device##_tap_type.refs, 1); 					\
+		atomic_add_int(&ng_##device##_tap_type.refs, 1); 		\
 																\
 	error = ng_make_node_common(&ng_##device##_tap_type, 		\
-		&sc->msk_tap_node); 									\
+		&sc->device##_tap_node); 									\
 	if (error != 0) { 											\
 		(void)printf("%s: ng_make_node_common() failed; " 		\
 				"error %d\n", __func__, error); 				\

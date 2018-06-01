@@ -31,18 +31,4 @@
 #define NG_VR_TAP_NODE_TYPE 	"vr_tap"
 #define NGM_VR_TAP_COOKIE		 1524849212	/* date -u +'%s' */
 
-/* Hook names */
-#define NG_VR_TAP_HOOK_RAW 	"raw" /* connection to raw device */
-
-/* Netgraph control messages */
-enum {
-	NGM_VR_TAP_GET_IFNAME = 1,
-};
-
-/* Service primitives */
-#ifdef _KERNEL
-int 	vr_tap_attach(struct vr_softc *);
-void 	vr_tap_detach(struct vr_softc *);
-void 	vr_tap_input(hook_p, struct mbuf **);
-#endif /* _KERNEL */
 #endif /* _VR_NG_VR_TAP_H_ */

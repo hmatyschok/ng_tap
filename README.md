@@ -16,6 +16,13 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
  
   Only the device-driver for vr(4), re(4), rl(4) and msk(4) 
   devices are supported, but this may change.
+
+msk – Marvell/SysKonnect Yukon II Gigabit Ethernet adapter driver:
+------------------------------------------------------------------
+ 
+ The implementation relies on so called boilerplate code wheere
+ preprocessor macros defind in netgraph/ng_tap.h.
+
   
 Legal Notice: 
 -------------
