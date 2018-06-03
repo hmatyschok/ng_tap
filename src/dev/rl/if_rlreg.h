@@ -59,6 +59,12 @@
 
 #include "opt_netgraph.h"
 
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif
+
 /*
  * RealTek 8129/8139 register offsets
  */

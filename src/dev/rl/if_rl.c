@@ -152,10 +152,6 @@ MODULE_DEPEND(rl, miibus, 1, 1, 1);
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
 
-#ifdef NETGRAPH
-#include <netgraph/ng_message.h>
-#include <netgraph/netgraph.h>
-#endif
 #include <dev/rl/if_rlreg.h>
 #ifdef NETGRAPH
 #include <dev/rl/ng_rl_tap.h>

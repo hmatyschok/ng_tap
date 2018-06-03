@@ -168,11 +168,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/msk/if_msk.c 298955 2016-05-03 03:41:25Z
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#ifdef NETGRAPH
-#include <netgraph/ng_message.h>
-#include <netgraph/netgraph.h>
-#include <netgraph/ng_parse.h>
-#endif
 #include <dev/msk/if_mskreg.h>
 #ifdef NETGRAPH
 #include <dev/msk/ng_msk_tap.h>
