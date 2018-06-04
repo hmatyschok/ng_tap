@@ -133,7 +133,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/vr/if_vr.c 296272 2016-03-01 17:47:32Z j
 #ifdef NETGRAPH
 #include <dev/vr/ng_vr_tap.h>
 #include <netgraph/ng_tap.h>
-NG_TAP_MODULE(VR, vr, vr_softc, NG_VR_TAP_NODE_TYPE, NGM_VR_TAP_COOKIE);
+NG_TAP_MODULE(VR, vr, vr_softc, NG_VR_TAP_NODE_TYPE);
 #endif
 
 /* "device miibus" required.  See GENERIC if you get errors here. */

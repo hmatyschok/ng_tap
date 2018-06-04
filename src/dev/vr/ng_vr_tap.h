@@ -29,6 +29,5 @@
 
 /* Node name for ng_vr_tap(4) */
 #define NG_VR_TAP_NODE_TYPE 	"vr_tap"
-#define NGM_VR_TAP_COOKIE		 1524849212	/* date -u +'%s' */
 
 #endif /* _VR_NG_VR_TAP_H_ */

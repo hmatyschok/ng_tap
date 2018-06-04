@@ -29,6 +29,5 @@
 
 /* Node name for ng_vr_tap(4) */
 #define NG_MSK_TAP_NODE_TYPE 	"msk_tap"
-#define NGM_MSK_TAP_COOKIE		1526076921 	/* date -u +'%s' */
 
 #endif /* _MSK_NG_MSK_TAP_H_ */

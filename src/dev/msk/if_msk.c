@@ -172,7 +172,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/msk/if_msk.c 298955 2016-05-03 03:41:25Z
 #ifdef NETGRAPH
 #include <dev/msk/ng_msk_tap.h>
 #include <netgraph/ng_tap.h>
-NG_TAP_MODULE(MSK_IF, msk, msk_if_softc, NG_MSK_TAP_NODE_TYPE, NGM_MSK_TAP_COOKIE);
+NG_TAP_MODULE(MSK_IF, msk, msk_if_softc, NG_MSK_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 MODULE_DEPEND(msk, pci, 1, 1, 1);

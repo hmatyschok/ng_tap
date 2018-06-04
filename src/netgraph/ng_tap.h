@@ -31,6 +31,9 @@
 #error "This file should not be included in user level programs"
 #endif
 
+/* Magic cookie */
+#define NGM_TAP_COOKIE		 1524849212	/* date -u +'%s' */
+
 /* Hook names */
 #define NG_TAP_HOOK_RAW 	"raw" /* connection to raw device */
 
@@ -39,10 +42,10 @@ enum {
 	NGM_TAP_GET_IFNAME = 1,
 };
 
-#define NG_TAP_CMDLIST_DECLARE(device, id) 						\
+#define NG_TAP_CMDLIST_DECLARE(device) 						\
 static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = { 	\
 	{ 															\
-	  (id), 													\
+	  NGM_TAP_COOKIE, 											\
 	  NGM_TAP_GET_IFNAME, 										\
 	  "getifname", 												\
 	  NULL, 													\
@@ -148,7 +151,7 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item) 			\
 /*
  * Process control message.
  */
-#define NG_TAP_RCVMSG_DECLARE(device, ctx, id) 					\
+#define NG_TAP_RCVMSG_DECLARE(device, ctx) 					\
 static int 														\
 ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 { 																\
@@ -159,7 +162,7 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 	NGI_GET_MSG(item, msg); 									\
 																\
 	switch (msg->header.typecookie) { 							\
-	case (id): 									                \
+	case NGM_TAP_COOKIE: 									                \
 		switch (msg->header.cmd) { 								\
 		case NGM_TAP_GET_IFNAME: 								\
 			NG_MKRESPONSE(resp, msg, IFNAMSIZ, M_NOWAIT); 		\
@@ -343,14 +346,14 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 /*
  * Put everything together.
  */
-#define NG_TAP_MODULE(pfx, device, ctx, str, id) 					\
-	NG_TAP_CMDLIST_DECLARE(device, id) 							\
+#define NG_TAP_MODULE(pfx, device, ctx, str) 					\
+	NG_TAP_CMDLIST_DECLARE(device) 							\
 	NG_TAP_CONSTRUCTOR_DECLARE(device) 							\
 	NG_TAP_SHUTDOWN_DECLARE(device)								\
 	NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx) 					\
 	NG_TAP_CONNECT_DECLARE(device)								\
 	NG_TAP_RCVDATA_DECLARE(device, ctx)							\
-	NG_TAP_RCVMSG_DECLARE(device, ctx, id) 						\
+	NG_TAP_RCVMSG_DECLARE(device, ctx) 						\
 	NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx)						\
 	NG_TAP_TYPE_DECLARE(device, str) 							\
 	NG_TAP_ATTACH_DECLARE(device, ctx) 							\
