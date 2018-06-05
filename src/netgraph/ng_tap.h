@@ -26,23 +26,24 @@
 
 #ifndef _NETGRAPH_NG_TAP_H_
 #define _NETGRAPH_NG_TAP_H_
- 
-#ifndef _KERNEL
-#error "This file should not be included in user level programs"
-#endif
 
 /* Magic cookie */
 #define NGM_TAP_COOKIE		 1524849212	/* date -u +'%s' */
 
 /* Hook names */
-#define NG_TAP_HOOK_RAW 	"raw" /* connection to raw device */
+#define NG_TAP_HOOK_RAW 	"rawdata" /* connection to raw device */
 
-/* Netgraph control messages */
+/* Generic netgraph(4) control messages */
 enum {
 	NGM_TAP_GET_IFNAME = 1,
 };
 
-#define NG_TAP_CMDLIST_DECLARE(device) 						\
+#ifdef _KERNEL
+
+/*
+ * Set of generic commands.
+ */
+#define NG_TAP_CMDLIST_DECLARE(device) 						    \
 static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = { 	\
 	{ 															\
 	  NGM_TAP_COOKIE, 											\
@@ -55,9 +56,9 @@ static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = { 	\
 }; 																\
 
 /* 
- * Instances are constructed by ng_xxx_tap_attach(9) are persistent. 
+ * By ng_xxx_tap_attach(9) instantiated nodes are persistent. 
  */
-#define NG_TAP_CONSTRUCTOR_DECLARE(device) \
+#define NG_TAP_CONSTRUCTOR_DECLARE(device) 						\
 static int 														\
 ng_##device##_tap_constructor(node_p node) 						\
 { 																\
@@ -85,17 +86,17 @@ static int 														\
 ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 { 																\
 	struct ctx *sc = NG_NODE_PRIVATE(node); 					\
-	struct ifnet *ifp = sc->device##_ifp; 					\
+	struct ifnet *ifp = sc->device##_ifp; 						\
 																\
 	if (strcmp(name, NG_TAP_HOOK_RAW) != 0) 					\
 		return (EPFNOSUPPORT); 									\
 																\
-	if (sc->device##_tap_hook != NULL) 						\
+	if (sc->device##_tap_hook != NULL) 							\
 		return (EISCONN); 										\
 																\
-	pfx##_LOCK(sc);					\
-	sc->device##_tap_hook = hook; 							\
-	pfx##_UNLOCK(sc);					\
+	pfx##_LOCK(sc); 											\
+	sc->device##_tap_hook = hook; 								\
+	pfx##_UNLOCK(sc); 											\
 																\
 	return (ifpromisc(ifp, 1)); 								\
 }
@@ -123,7 +124,7 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item) 			\
 { 																\
 	const node_p node = NG_HOOK_NODE(hook); 					\
 	struct ctx *sc = NG_NODE_PRIVATE(node); 					\
- 	struct ifnet *ifp = sc->device##_ifp; 					\
+ 	struct ifnet *ifp = sc->device##_ifp; 						\
 	struct mbuf *m; 											\
 																\
 	NGI_GET_M(item, m); 										\
@@ -151,7 +152,7 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item) 			\
 /*
  * Process control message.
  */
-#define NG_TAP_RCVMSG_DECLARE(device, ctx) 					\
+#define NG_TAP_RCVMSG_DECLARE(device, ctx) 						\
 static int 														\
 ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 { 																\
@@ -162,7 +163,7 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 	NGI_GET_MSG(item, msg); 									\
 																\
 	switch (msg->header.typecookie) { 							\
-	case NGM_TAP_COOKIE: 									                \
+	case NGM_TAP_COOKIE: 										\
 		switch (msg->header.cmd) { 								\
 		case NGM_TAP_GET_IFNAME: 								\
 			NG_MKRESPONSE(resp, msg, IFNAMSIZ, M_NOWAIT); 		\
@@ -173,7 +174,7 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook) \
 			} 													\
 																\
 			(void)snprintf(resp->data, IFNAMSIZ, 				\
-				"%s", sc->device##_ifp->if_xname); 			\
+				"%s", sc->device##_ifp->if_xname); 				\
 																\
 			error = 0; 											\
 			break; 												\
@@ -200,17 +201,17 @@ ng_##device##_tap_disconnect(hook_p hook) 						\
 { 																\
 	const node_p node = NG_HOOK_NODE(hook); 					\
 	struct ctx *sc = NG_NODE_PRIVATE(node); 					\
-	struct ifnet *ifp = sc->device##_ifp; 					\
+	struct ifnet *ifp = sc->device##_ifp; 						\
 																\
-	pfx##_LOCK(sc); 								\
-	sc->device##_tap_hook = NULL; 							\
-	pfx##_UNLOCK(sc); 							\
+	pfx##_LOCK(sc); 											\
+	sc->device##_tap_hook = NULL; 								\
+	pfx##_UNLOCK(sc); 											\
 																\
 	return (ifpromisc(ifp, 0)); 								\
 }
 
 /*
- * Implements netgraph(4) node types. 
+ * Implements ng_xxx_tap(4) node type. 
  */
 #define NG_TAP_TYPE_DECLARE(device, str) 						\
 static struct ng_type ng_##device##_tap_type = { 				\
@@ -230,12 +231,11 @@ static struct ng_type ng_##device##_tap_type = { 				\
 /* Service primitives. */
 
 /* 
- * Attach instance of xxx(4) with netgraph(4) node.
+ * Attach instance of xxx(4) NIC with netgraph(4) node.
  * 
- * It is called once for each physical card during 
- * device_attach(9). 
+ * It is called once for each physical card during device_attach(9). 
  * 
- * This is effectively ng_device_tap_constructor(9).
+ * This is effectively ng_xxx_tap_constructor(9).
  */
 #define NG_TAP_ATTACH_DECLARE(device, ctx) 						\
 static int 														\
@@ -256,7 +256,7 @@ ng_##device##_tap_attach(struct ctx *sc) 						\
 		atomic_add_int(&ng_##device##_tap_type.refs, 1); 		\
 																\
 	error = ng_make_node_common(&ng_##device##_tap_type, 		\
-		&sc->device##_tap_node); 									\
+		&sc->device##_tap_node); 								\
 	if (error != 0) { 											\
 		(void)printf("%s: ng_make_node_common() failed; " 		\
 				"error %d\n", __func__, error); 				\
@@ -267,7 +267,7 @@ ng_##device##_tap_attach(struct ctx *sc) 						\
 	(void)snprintf(name, IFNAMSIZ, "%s%d", 						\
 		ng_##device##_tap_type.name, ifp->if_index); 			\
 																\
-	error = ng_name_node(sc->device##_tap_node, name); 		\
+	error = ng_name_node(sc->device##_tap_node, name); 			\
 	if (error != 0) { 											\
 		(void)printf("%s: ng_name_node() failed; " 				\
 				"error %d\n", __func__, error); 				\
@@ -278,7 +278,7 @@ out: 															\
 	return (error); 											\
 																\
 bad1: 															\
-	NG_NODE_UNREF(sc->device##_tap_node); 					\
+	NG_NODE_UNREF(sc->device##_tap_node); 						\
 bad: 															\
 	if (ng_##device##_tap_type.refs == 1) 						\
 		ng_rmtype(&ng_##device##_tap_type); 					\
@@ -291,20 +291,17 @@ bad: 															\
 /* 
  * Detach from the netgraph(4) domain(9).
  * 
- * It is called once for each physical card 
- * during device_detach(9) or during device_attach(9) 
- * as exeception handling, if something went 
- * wrong. 
- * 
- * This is effectively ng_device_tap_destructor(9).
+ * It is called once for each physical card during device_detach(9) 
+ * or during device_attach(9) as exeception handling, if something 
+ * went wrong. This is effectively ng_device_tap_destructor(9).
  */
 #define NG_TAP_DETACH_DECLARE(device, ctx) 						\
 static void 													\
 ng_##device##_tap_detach(struct ctx *sc) 						\
 { 																\
-	if (NG_NODE_PRIVATE(sc->device##_tap_node)) { 			\
-		ng_rmnode_self(sc->device##_tap_node); 				\
-		NG_NODE_UNREF(sc->device##_tap_node); 				\
+	if (NG_NODE_PRIVATE(sc->device##_tap_node)) { 				\
+		ng_rmnode_self(sc->device##_tap_node); 					\
+		NG_NODE_UNREF(sc->device##_tap_node); 					\
 																\
 		if (ng_##device##_tap_type.refs == 1) 					\
 			ng_rmtype(&ng_##device##_tap_type); 				\
@@ -347,17 +344,17 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
  * Put everything together.
  */
 #define NG_TAP_MODULE(pfx, device, ctx, str) 					\
-	NG_TAP_CMDLIST_DECLARE(device) 							\
+	NG_TAP_CMDLIST_DECLARE(device) 								\
 	NG_TAP_CONSTRUCTOR_DECLARE(device) 							\
 	NG_TAP_SHUTDOWN_DECLARE(device)								\
 	NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx) 					\
 	NG_TAP_CONNECT_DECLARE(device)								\
 	NG_TAP_RCVDATA_DECLARE(device, ctx)							\
-	NG_TAP_RCVMSG_DECLARE(device, ctx) 						\
-	NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx)						\
+	NG_TAP_RCVMSG_DECLARE(device, ctx) 							\
+	NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx) 				\
 	NG_TAP_TYPE_DECLARE(device, str) 							\
 	NG_TAP_ATTACH_DECLARE(device, ctx) 							\
 	NG_TAP_DETACH_DECLARE(device, ctx)							\
 	NG_TAP_INPUT_DECLARE(device)
-
+#endif /* _KERNEL */
 #endif /* _NETGRAPH_NG_TAP_H_ */

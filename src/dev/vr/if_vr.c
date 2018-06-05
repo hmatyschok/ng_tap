@@ -1359,11 +1359,10 @@ vr_rxeof(struct vr_softc *sc)
 	ifp = sc->vr_ifp;
 	cons = sc->vr_cdata.vr_rx_cons;
 	rx_npkts = 0;
-
-#ifdef NETGRAPH	
 /*
  * If hook is connected, the CRC32 based FCS shall not removed.
  */
+#ifdef NETGRAPH	
 	ether_crc_len = (sc->vr_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
 #endif 	/* !NETGRAPH */
 

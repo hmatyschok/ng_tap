@@ -155,8 +155,9 @@ MODULE_DEPEND(rl, miibus, 1, 1, 1);
 #include <dev/rl/if_rlreg.h>
 #ifdef NETGRAPH
 #include <dev/rl/ng_rl_tap.h>
+#include <netgraph/ng_tap.h>
+NG_TAP_MODULE(RL, rl, rl_softc, NG_RL_TAP_NODE_TYPE);
 #endif
-
 /*
  * Various supported device vendors/types and their names.
  */
@@ -891,7 +892,7 @@ rl_attach(device_t dev)
 	}
 #ifdef NETGRAPH
 	if (error == 0)
-		rl_tap_attach(sc);
+		ng_rl_tap_attach(sc);
 #endif /* NETGRAPH */
 
 fail:
@@ -919,7 +920,7 @@ rl_detach(device_t dev)
 
 	KASSERT(mtx_initialized(&sc->rl_mtx), ("rl mutex not initialized"));
 #ifdef NETGRAPH
-	rl_tap_detach(sc);
+	ng_rl_tap_detach(sc);
 #endif /* NETGRAPH */
 #ifdef DEVICE_POLLING
 	if (ifp->if_capenable & IFCAP_POLLING)
@@ -1172,7 +1173,7 @@ rl_rxeof(struct rl_softc *sc)
 	uint16_t		limit;
 	uint16_t		max_bytes, rx_bytes = 0;
 #ifdef NETGRAPH
-	int 	rxerr;
+	int 	ether_crc_len, rxerr;
 #endif /* NETGRAPH */
 
 	RL_LOCK_ASSERT(sc);
@@ -1189,6 +1190,12 @@ rl_rxeof(struct rl_softc *sc)
 		max_bytes = (RL_RXBUFLEN - cur_rx) + limit;
 	else
 		max_bytes = limit - cur_rx;
+/*
+ * If hook is connected, the CRC32 based FCS shall not removed.
+ */
+#ifdef NETGRAPH	
+	ether_crc_len = (sc->rl_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+#endif 	/* !NETGRAPH */
 
 	while((CSR_READ_1(sc, RL_COMMAND) & RL_CMD_EMPTY_RXBUF) == 0) {
 #ifdef DEVICE_POLLING
@@ -1219,7 +1226,7 @@ rl_rxeof(struct rl_softc *sc)
 			
 #ifdef NETGRAPH
 			if (rxstat & RL_RDESC_STAT_RXERRSUM) {
-				rxerr = (sc->rl_tap_hook == NULL) ? 1 : 0;
+				rxerr = (sc->rl_tap_hook != NULL) ? 0 : 1;
 			} else
 				rxerr = 1;
 			
@@ -1248,8 +1255,7 @@ rl_rxeof(struct rl_softc *sc)
 		 * to trim off the CRC manually.
 		 */
 #ifdef NETGRAPH		 
-		if (sc->rl_tap_hook == NULL)
-			total_len -= ETHER_CRC_LEN;
+		total_len -= ether_crc_len;
 #else 
 		total_len -= ETHER_CRC_LEN;
 #endif /* ! NETGRAPH */
@@ -1295,7 +1301,7 @@ rl_rxeof(struct rl_softc *sc)
  */		
 #ifdef NETGRAPH
 		if (sc->rl_tap_hook != NULL) {
-			rl_tap_input(sc->rl_tap_hook, &m);
+			ng_rl_tap_input(sc->rl_tap_hook, &m);
 			if (m != NULL) {
 				(*ifp->if_input)(ifp, m);
 			}
