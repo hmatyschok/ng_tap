@@ -173,21 +173,18 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/re/if_re.c 306309 2016-09-25 13:52:55Z k
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#ifdef NETGRAPH
-#include <netgraph/ng_message.h>
-#include <netgraph/netgraph.h>
-#endif
-#include <dev/rl/if_rlreg.h>
-#ifdef NETGRAPH
-#include <dev/re/ng_re_tap.h>
-#endif
-
 MODULE_DEPEND(re, pci, 1, 1, 1);
 MODULE_DEPEND(re, ether, 1, 1, 1);
 MODULE_DEPEND(re, miibus, 1, 1, 1);
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
+
+#include <dev/rl/if_rlreg.h>
+#ifdef NETGRAPH
+#include <dev/re/ng_re_tap.h>
+NG_TAP_MODULE(RL, rl, rl_softc, NG_RE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /* Tunables. */
 static int intr_filter = 0;
@@ -691,6 +688,7 @@ re_set_rxmode(struct rl_softc *sc)
 	ifp = sc->rl_ifp;
 
 	rxfilt = RL_RXCFG_CONFIG | RL_RXCFG_RX_INDIV | RL_RXCFG_RX_BROAD;
+
 	if ((sc->rl_flags & RL_FLAG_EARLYOFF) != 0)
 		rxfilt |= RL_RXCFG_EARLYOFF;
 	else if ((sc->rl_flags & RL_FLAG_8168G_PLUS) != 0)
@@ -1773,7 +1771,7 @@ re_attach(device_t dev)
 	}
 #ifdef NETGRAPH  
 	if (error == 0) 
-		error = re_tap_attach(sc);
+		error = ng_rl_tap_attach(sc);
 #endif /* NETGRAPH */
 fail:
 	if (error)
@@ -1799,8 +1797,8 @@ re_detach(device_t dev)
 	sc = device_get_softc(dev);
 	ifp = sc->rl_ifp;
 	KASSERT(mtx_initialized(&sc->rl_mtx), ("re mutex not initialized"));
-#ifdef NETGRAPH  
-	re_tap_detach(sc);
+#ifdef NETGRAPH
+	ng_rl_tap_detach(sc);
 #endif /* NETGRAPH */
 
 	/* These should only be active if attach succeeded */
@@ -2215,7 +2213,7 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 		jumbo = 0;
 
 #ifdef NETGRAPH	
-	ether_crc_len = (sc->rl_tap_hook == NULL) ? ETHER_CRC_LEN : 0;
+	ether_crc_len = (sc->rl_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
 #endif 	/* !NETGRAPH */
 
 	/* Invalidate the descriptor memory */
@@ -2297,7 +2295,7 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 		 */
 		if ((rxstat & RL_RDESC_STAT_RXERRSUM) != 0) {
 #ifdef NETGRAPH
-			rxerr = (sc->rl_tap_hook == NULL) ? 1 : 0;
+			rxerr = (sc->rl_tap_hook != NULL) ? 0 : 1;
 #else			
 			rxerr = 1;
 #endif /* ! NETGRAPH */
@@ -2444,7 +2442,7 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
  */		
 #ifdef NETGRAPH
 		if (sc->rl_tap_hook != NULL) {
-			re_tap_input(sc->rl_tap_hook, &m);
+			ng_rl_tap_input(sc->rl_tap_hook, &m);
 			if (m != NULL) {
 				(*ifp->if_input)(ifp, m);
 			}

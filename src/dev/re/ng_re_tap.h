@@ -29,20 +29,5 @@
 
 /* Node name for ng_re_tap(4) */
 #define NG_RE_TAP_NODE_TYPE 	"re_tap"
-#define NGM_RE_TAP_COOKIE 		1523982355	/* date -u +'%s' */
 
-/* Hook names */
-#define NG_RE_TAP_HOOK_RAW 	"raw" /* connection to raw device */
-
-/* Netgraph control messages */
-enum {
-	NGM_RE_TAP_GET_IFNAME = 1,
-};
-
-/* Service primitives */
-#ifdef _KERNEL
-int 	re_tap_attach(struct rl_softc *);
-void 	re_tap_detach(struct rl_softc *);
-void 	re_tap_input(hook_p, struct mbuf **);
-#endif /* _KERNEL */
 #endif /* _RE_NG_RE_TAP_H_ */
