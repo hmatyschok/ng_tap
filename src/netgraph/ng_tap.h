@@ -238,7 +238,6 @@ static struct ng_type ng_##device##_tap_type = { 				\
  * This is effectively ng_xxx_tap_constructor(9).
  */
 #define NG_TAP_ATTACH_DECLARE(device, ctx) 						\
-static int 	ng_##device##_tap_attach(struct ctx *); 			\
 static int 														\
 ng_##device##_tap_attach(struct ctx *sc) 						\
 { 																\
