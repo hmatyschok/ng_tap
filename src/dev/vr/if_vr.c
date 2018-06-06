@@ -877,7 +877,8 @@ vr_detach(device_t dev)
 	struct vr_softc		*sc = device_get_softc(dev);
 	struct ifnet		*ifp = sc->vr_ifp;
 
-	KASSERT(mtx_initialized(&sc->vr_mtx), ("vr mutex not initialized"));
+	KASSERT(mtx_initialized(&sc->vr_mtx), 
+		("vr mutex not initialized"));
 
 #ifdef NETGRAPH  
 	ng_vr_tap_detach(sc);

@@ -3254,7 +3254,7 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
 	MSK_IF_LOCK_ASSERT(sc_if);
 	
 #ifdef NETGRAPH
-	msk_max_framelen = MSK_JUMBO_FRAMELEN - ETHER_HDR_LEN;
+	msk_max_framelen = MSK_MAX_FRAMELEN;
 	
 	if (sc_if->msk_tap_hook != NULL) 
 		msk_max_framelen += ETHER_CRC_LEN;	 

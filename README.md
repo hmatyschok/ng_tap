@@ -16,12 +16,9 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
  
   Only the device-driver for vr(4), re(4), rl(4) and msk(4) 
   devices are supported, but this may change.
-
-msk – Marvell/SysKonnect Yukon II Gigabit Ethernet adapter driver:
-------------------------------------------------------------------
  
- The implementation relies on so called boilerplate code wheere
- preprocessor macros defind in netgraph/ng_tap.h.
+ The implementation relies on so called boilerplate code
+ as defined as preprocessor macros in netgraph/ng_tap.h.
 
   
 Legal Notice: 
@@ -80,4 +77,8 @@ This is a necessary security measure, because I would like to know
 who is contacting me, because of this planet is full of individuals 
 whose are operating on one's own merits and this imply that this 
 planet is not a so called "Ponyhof", unfortunately. :)
+
+Feel free to support me by donations.
 </code></pre>
+[![Flattr this git repo](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=hmatyschok&url=https://github.com/hmatyschok/MeshBSD&title=MeshBSD&language=&tags=github&category=software) 
+
