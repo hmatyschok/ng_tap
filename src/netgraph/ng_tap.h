@@ -45,15 +45,15 @@ enum {
  */
 #define NG_TAP_CMDLIST_DECLARE(device)                                \
 static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = {        \
-	{                                                                 \
-	  NGM_TAP_COOKIE,                                                 \
-	  NGM_TAP_GET_IFNAME,                                             \
-	  "getifname",                                                    \
-	  NULL,                                                           \
-	  &ng_parse_string_type,                                          \
-	},                                                                \
-	{ 0 } 														      \
-}; 																      \
+	{                                                             \
+	  NGM_TAP_COOKIE,                                             \
+	  NGM_TAP_GET_IFNAME,                                         \
+	  "getifname",                                                \
+	  NULL,                                                       \
+	  &ng_parse_string_type,                                      \
+	},                                                            \
+	{ 0 } 														  \
+}; 																  \
 
 /* 
  * By ng_xxx_tap_attach(9) instantiated nodes are persistent. 
@@ -62,7 +62,7 @@ static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = {        \
 static int                                                            \
 ng_##device##_tap_constructor(node_p node)                            \
 {                                                                     \
-	return (EINVAL);                                                  \
+	return (EINVAL);                                              \
 }
 
 /* 
@@ -72,8 +72,8 @@ ng_##device##_tap_constructor(node_p node)                            \
 static int                                                            \
 ng_##device##_tap_shutdown(node_p node)                               \
 {                                                                     \
-	if ((node->nd_flags & NGF_REALLY_DIE) == 0)                       \
-		node->nd_flags &= ~NGF_INVALID;                               \
+	if ((node->nd_flags & NGF_REALLY_DIE) == 0)                   \
+		node->nd_flags &= ~NGF_INVALID;                       \
                                                                       \
 	return (0);                                                       \
 }
@@ -85,20 +85,20 @@ ng_##device##_tap_shutdown(node_p node)                               \
 static int                                                            \
 ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 {                                                                     \
-	struct ctx *sc = NG_NODE_PRIVATE(node);                           \
-	struct ifnet *ifp = sc->device##_ifp;                             \
+	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
+	struct ifnet *ifp = sc->device##_ifp;                         \
+                                                                  \
+	if (strcmp(name, NG_TAP_HOOK_UPSTREAM) != 0)                  \
+		return (EPFNOSUPPORT);                                \
+                                                                  \
+	if (sc->device##_tap_hook != NULL)                            \
+		return (EISCONN);                                     \
                                                                       \
-	if (strcmp(name, NG_TAP_HOOK_UPSTREAM) != 0)                      \
-		return (EPFNOSUPPORT);                                        \
-                                                                      \
-	if (sc->device##_tap_hook != NULL)                                \
-		return (EISCONN);                                             \
-                                                                      \
-	pfx##_LOCK(sc);                                                   \
-	sc->device##_tap_hook = hook;                                     \
-	pfx##_UNLOCK(sc);                                                 \
-                                                                      \
-	return (ifpromisc(ifp, 1));                                       \
+	pfx##_LOCK(sc);                                               \
+	sc->device##_tap_hook = hook;                                 \
+	pfx##_UNLOCK(sc);                                             \
+                                                                  \
+	return (ifpromisc(ifp, 1));                                   \
 }
 
 /*
@@ -108,9 +108,9 @@ ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 static int                                                            \
 ng_##device##_tap_connect(hook_p hook)                                \
 {                                                                     \
-	NG_HOOK_FORCE_QUEUE(NG_HOOK_PEER(hook));                          \
+	NG_HOOK_FORCE_QUEUE(NG_HOOK_PEER(hook));                      \
                                                                       \
-	return (0);                                                       \
+	return (0);                                                   \
 }
 
 /* 
@@ -122,31 +122,31 @@ ng_##device##_tap_connect(hook_p hook)                                \
 static int                                                            \
 ng_##device##_tap_rcvdata(hook_p hook, item_p item)                   \
 {                                                                     \
-	const node_p node = NG_HOOK_NODE(hook);                           \
-	struct ctx *sc = NG_NODE_PRIVATE(node);                           \
- 	struct ifnet *ifp = sc->device##_ifp;                             \
-	struct mbuf *m;                                                   \
+	const node_p node = NG_HOOK_NODE(hook);                       \
+	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
+ 	struct ifnet *ifp = sc->device##_ifp;                         \
+	struct mbuf *m;                                               \
                                                                       \
-	NGI_GET_M(item, m);                                               \
-	NG_FREE_ITEM(item);                                               \
+	NGI_GET_M(item, m);                                           \
+	NG_FREE_ITEM(item);                                           \
                                                                       \
-	if (m->m_pkthdr.rcvif != ifp) {                                   \
-		m_freem(m);                                                   \
-		return (EINVAL);                                              \
-	}                                                                 \
+	if (m->m_pkthdr.rcvif != ifp) {                               \
+		m_freem(m);                                           \
+		return (EINVAL);                                      \
+	}                                                             \
                                                                       \
-	if (m->m_pkthdr.len < sizeof(struct ether_header)) {              \
-		m_freem(m);                                                   \
-		return (EINVAL);                                              \
-	}                                                                 \
+	if (m->m_pkthdr.len < sizeof(struct ether_header)) {          \
+		m_freem(m);                                           \
+		return (EINVAL);                                      \
+	}                                                             \
                                                                       \
-	if (m->m_len < sizeof(struct ether_header)) {                     \
-		m = m_pullup(m, sizeof(struct ether_header));                 \
-		if (m == NULL)                                                \
-			return (ENOBUFS);                                         \
-	}                                                                 \
+	if (m->m_len < sizeof(struct ether_header)) {                 \
+		m = m_pullup(m, sizeof(struct ether_header));         \
+		if (m == NULL)                                        \
+			return (ENOBUFS);                             \
+	}                                                             \
                                                                       \
-	return (if_input(ifp, m));                                        \
+	return (if_input(ifp, m));                                    \
 }
 
 /*
@@ -156,40 +156,40 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item)                   \
 static int                                                            \
 ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)   \
 {                                                                     \
-	struct ctx *sc = NG_NODE_PRIVATE(node);                           \
-	struct ng_mesg *resp = NULL, *msg;                                \
-	int error;                                                        \
+	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
+	struct ng_mesg *resp = NULL, *msg;                            \
+	int error;                                                    \
                                                                       \
-	NGI_GET_MSG(item, msg);                                           \
+	NGI_GET_MSG(item, msg);                                       \
+                                                                  \
+	switch (msg->header.typecookie) {                             \
+	case NGM_TAP_COOKIE:                                      \
+		switch (msg->header.cmd) {                            \
+		case NGM_TAP_GET_IFNAME:                              \
+			NG_MKRESPONSE(resp, msg, IFNAMSIZ, M_NOWAIT); \
                                                                       \
-	switch (msg->header.typecookie) {                                 \
-	case NGM_TAP_COOKIE:                                              \
-		switch (msg->header.cmd) {                                    \
-		case NGM_TAP_GET_IFNAME:                                      \
-			NG_MKRESPONSE(resp, msg, IFNAMSIZ, M_NOWAIT);             \
+			if (resp == NULL) {                           \
+				error = ENOMEM;                       \
+				break;                                \
+			}                                             \
                                                                       \
-			if (resp == NULL) {                                       \
-				error = ENOMEM;                                       \
-				break;                                                \
-			}                                                         \
+			(void)snprintf(resp->data, IFNAMSIZ,          \
+				"%s", sc->device##_ifp->if_xname);        \
                                                                       \
-			(void)snprintf(resp->data, IFNAMSIZ,                      \
-				"%s", sc->device##_ifp->if_xname);                    \
+			error = 0;                                    \
+			break;                                        \
+		default:                                              \
+			error = EINVAL;                               \
+			break;                                        \
+		}                                                     \
+	default:                                                      \
+		error = EINVAL;                                       \
+		break;                                                \
+	}                                                             \
+	NG_RESPOND_MSG(error, node, item, resp);                      \
+	NG_FREE_MSG(msg);                                             \
                                                                       \
-			error = 0;                                                \
-			break;                                                    \
-		default:                                                      \
-			error = EINVAL;                                           \
-			break;                                                    \
-		}                                                             \
-	default:                                                          \
-		error = EINVAL;                                               \
-		break;                                                        \
-	}                                                                 \
-	NG_RESPOND_MSG(error, node, item, resp);                          \
-	NG_FREE_MSG(msg);                                                 \
-                                                                      \
-	return (error);                                                   \
+	return (error);                                               \
 }
 
 /*
@@ -198,16 +198,16 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)   \
 #define NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx)                   \
 static int                                                            \
 ng_##device##_tap_disconnect(hook_p hook)                             \
-{                                                                     \
-	const node_p node = NG_HOOK_NODE(hook);                           \
-	struct ctx *sc = NG_NODE_PRIVATE(node);                           \
-	struct ifnet *ifp = sc->device##_ifp;                             \
+{                                                                 \
+	const node_p node = NG_HOOK_NODE(hook);                       \
+	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
+	struct ifnet *ifp = sc->device##_ifp;                         \
                                                                       \
-	pfx##_LOCK(sc);                                                   \
-	sc->device##_tap_hook = NULL;                                     \
-	pfx##_UNLOCK(sc);                                                 \
+	pfx##_LOCK(sc);                                               \
+	sc->device##_tap_hook = NULL;                                 \
+	pfx##_UNLOCK(sc);                                             \
                                                                       \
-	return (ifpromisc(ifp, 0));                                       \
+	return (ifpromisc(ifp, 0));                                   \
 }
 
 /*
@@ -215,17 +215,17 @@ ng_##device##_tap_disconnect(hook_p hook)                             \
  */
 #define NG_TAP_TYPE_DECLARE(device, str)                              \
 static struct ng_type ng_##device##_tap_type = {                      \
- 	.version =	NG_ABI_VERSION,                                       \
-	.name =		(str),                                                \
-	.mod_event =	NULL,                                             \
-	.constructor =	ng_##device##_tap_constructor,                    \
-	.rcvmsg =	ng_##device##_tap_rcvmsg,                             \
-	.shutdown =	ng_##device##_tap_shutdown,                           \
-	.newhook =	ng_##device##_tap_newhook,                            \
-	.rcvdata =	ng_##device##_tap_rcvdata,                            \
-	.connect = 	ng_##device##_tap_connect,                            \
-	.disconnect =	ng_##device##_tap_disconnect,                     \
-	.cmdlist =	ng_##device##_tap_cmdlist,                            \
+ 	.version =	NG_ABI_VERSION,                                   \
+	.name =		(str),                                            \
+	.mod_event =	NULL,                                         \
+	.constructor =	ng_##device##_tap_constructor,                \
+	.rcvmsg =	ng_##device##_tap_rcvmsg,                         \
+	.shutdown =	ng_##device##_tap_shutdown,                       \
+	.newhook =	ng_##device##_tap_newhook,                        \
+	.rcvdata =	ng_##device##_tap_rcvdata,                        \
+	.connect = 	ng_##device##_tap_connect,                        \
+	.disconnect =	ng_##device##_tap_disconnect,                 \
+	.cmdlist =	ng_##device##_tap_cmdlist,                        \
 }; 
 
 /* Service primitives. */
@@ -241,51 +241,51 @@ static struct ng_type ng_##device##_tap_type = {                      \
 static int                                                            \
 ng_##device##_tap_attach(struct ctx *sc)                              \
 {                                                                     \
-	char name[IFNAMSIZ];                                              \
-	struct ifnet *ifp;                                                \
-	int error; 													\
-																\
-	if (ng_##device##_tap_type.refs == 0) { 					\
-		error = ng_newtype(&ng_##device##_tap_type); 			\
-		if (error != 0) { 										\
-			(void)printf("%s: ng_newtype() failed; " 			\
-				"error %d\n", __func__, error); 				\
-			goto out; 											\
-		} 														\
-	} else 														\
-		atomic_add_int(&ng_##device##_tap_type.refs, 1); 		\
-																\
-	error = ng_make_node_common(&ng_##device##_tap_type, 		\
-		&sc->device##_tap_node); 								\
-	if (error != 0) { 											\
-		(void)printf("%s: ng_make_node_common() failed; " 		\
-				"error %d\n", __func__, error); 				\
-		goto bad; 												\
-	} 															\
-	ifp = sc->device##_ifp; 									\
-																\
-	(void)snprintf(name, IFNAMSIZ, "%s%d", 						\
-		ng_##device##_tap_type.name, ifp->if_index); 			\
-																\
-	error = ng_name_node(sc->device##_tap_node, name); 			\
-	if (error != 0) { 											\
-		(void)printf("%s: ng_name_node() failed; " 				\
-				"error %d\n", __func__, error); 				\
-		goto bad1; 												\
-	} 															\
-	NG_NODE_SET_PRIVATE(sc->device##_tap_node, sc); 			\
-out: 															\
-	return (error); 											\
-																\
-bad1: 															\
-	NG_NODE_UNREF(sc->device##_tap_node); 						\
-bad: 															\
-	if (ng_##device##_tap_type.refs == 1) 						\
-		ng_rmtype(&ng_##device##_tap_type); 					\
-	else 														\
-		atomic_subtract_int(&ng_##device##_tap_type.refs, 1); 	\
-																\
-	goto out; 													\
+	char name[IFNAMSIZ];                                          \
+	struct ifnet *ifp;                                            \
+	int error;                                                    \
+                                                                      \
+	if (ng_##device##_tap_type.refs == 0) {                       \
+		error = ng_newtype(&ng_##device##_tap_type);          \
+		if (error != 0) {                                     \
+			(void)printf("%s: ng_newtype() failed; "      \
+				"error %d\n", __func__, error);       \
+			goto out;                                     \
+		}                                                     \
+	} else                                                        \
+		atomic_add_int(&ng_##device##_tap_type.refs, 1);      \
+                                                                      \
+	error = ng_make_node_common(&ng_##device##_tap_type,          \
+		&sc->device##_tap_node);                              \
+	if (error != 0) {                                             \
+		(void)printf("%s: ng_make_node_common() failed; "     \
+				"error %d\n", __func__, error);       \
+		goto bad;                                             \
+	}                                                             \
+	ifp = sc->device##_ifp;                                       \
+                                                                      \
+	(void)snprintf(name, IFNAMSIZ, "%s%d",                        \
+		ng_##device##_tap_type.name, ifp->if_index);          \
+                                                                      \
+	error = ng_name_node(sc->device##_tap_node, name);            \
+	if (error != 0) {                                             \
+		(void)printf("%s: ng_name_node() failed; "            \
+				"error %d\n", __func__, error);       \
+		goto bad1;                                            \
+	}                                                         \
+	NG_NODE_SET_PRIVATE(sc->device##_tap_node, sc);               \
+out:                                                                  \
+	return (error);                                               \
+                                                                      \
+bad1:                                                                 \
+	NG_NODE_UNREF(sc->device##_tap_node);                         \
+bad:                                                                  \
+	if (ng_##device##_tap_type.refs == 1)                         \
+		ng_rmtype(&ng_##device##_tap_type);                   \
+	else                                                          \
+		atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
+                                                                      \
+	goto out;                                                     \
 }
 
 /* 
@@ -295,19 +295,19 @@ bad: 															\
  * or during device_attach(9) as exeception handling, if something 
  * went wrong. This is effectively ng_device_tap_destructor(9).
  */
-#define NG_TAP_DETACH_DECLARE(device, ctx) 						\
-static void 													\
-ng_##device##_tap_detach(struct ctx *sc) 						\
-{ 																\
-	if (NG_NODE_PRIVATE(sc->device##_tap_node)) { 				\
-		ng_rmnode_self(sc->device##_tap_node); 					\
-		NG_NODE_UNREF(sc->device##_tap_node); 					\
-																\
-		if (ng_##device##_tap_type.refs == 1) 					\
-			ng_rmtype(&ng_##device##_tap_type); 				\
-		else 													\
+#define NG_TAP_DETACH_DECLARE(device, ctx)                            \
+static void                                                           \
+ng_##device##_tap_detach(struct ctx *sc)                              \
+{                                                                     \
+	if (NG_NODE_PRIVATE(sc->device##_tap_node)) {                 \
+		ng_rmnode_self(sc->device##_tap_node);                \
+		NG_NODE_UNREF(sc->device##_tap_node);                 \
+                                                                      \
+		if (ng_##device##_tap_type.refs == 1)                 \
+			ng_rmtype(&ng_##device##_tap_type);           \
+		else                                                  \
 			atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
-	} 															\
+	}                                                             \
 }
 
 /*

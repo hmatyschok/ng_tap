@@ -967,7 +967,6 @@ struct rl_softc {
 #define	RL_FLAG_8168G_PLUS	0x00040000
 #define	RL_FLAG_PCIE		0x40000000
 #define	RL_FLAG_LINK		0x80000000
-	
 #ifdef NETGRAPH
 	node_p 	rl_tap_node;
 	hook_p 	rl_tap_hook;

@@ -14,13 +14,12 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
  oriented framework for implementing messege-passing within and
  between nodes of netgraph(4) domain(9). 
  
-  Only the device-driver for vr(4), re(4), rl(4) and msk(4) 
-  devices are supported, but this may change.
+  Only the device-driver for vr(4), re(4), rl(4) msk(4) and 
+  bge(4) devices are supported, but this may change.
  
  The implementation relies on so called boilerplate code
  as defined as preprocessor macros in netgraph/ng_tap.h.
 
-  
 Legal Notice: 
 -------------
  
@@ -31,8 +30,10 @@ Legal Notice:
   (c) Realtek is a trademark of Realtek Semiconductor Corp.
   
   (d) Marvell Yukon is a trademark of Marvell Technology Group Ltd.
+ 
+  (e) NetXtreme and NetLink are trademarks of Broadcom of Corp.
   
-  (e) Don't use this software on production systems!
+  (f) Don't use this software on production systems!
   
 Additional information about contacting
 ---------------------------------------
