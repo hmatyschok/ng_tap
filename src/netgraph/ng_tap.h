@@ -116,7 +116,9 @@ ng_##device##_tap_connect(hook_p hook)                                \
 /* 
  * Receive data encapsulated by mbuf(9) message primitives from 
  * netgraph(4) peer node, reinject upstream and demultiplex by 
- * layer above or forward by e. g.  if_bridge(4). 
+ * layer above or forward by e. g.  if_bridge(4).
+ * 
+ * We assumming that the ETHER_CRC_SUM was _not_ stripped off.
  */
 #define NG_TAP_RCVDATA_DECLARE(device, ctx)                           \
 static int                                                            \
@@ -125,28 +127,40 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item)                   \
 	const node_p node = NG_HOOK_NODE(hook);                       \
 	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
  	struct ifnet *ifp = sc->device##_ifp;                         \
-	struct mbuf *m;                                               \
+	struct mbuf *m0, *m, *t;                                          \
                                                                       \
-	NGI_GET_M(item, m);                                           \
+	NGI_GET_M(item, m0);                                          \
 	NG_FREE_ITEM(item);                                           \
                                                                       \
-	if (m->m_pkthdr.rcvif != ifp) {                               \
-		m_freem(m);                                           \
+	if (m0->m_pkthdr.rcvif != ifp) {                              \
+		m_freem(m0);                                          \
 		return (EINVAL);                                      \
 	}                                                             \
                                                                       \
-	if (m->m_pkthdr.len < sizeof(struct ether_header)) {          \
-		m_freem(m);                                           \
+	if (m0->m_pkthdr.len < sizeof(struct ether_header)) {         \
+		m_freem(m0);                                          \
 		return (EINVAL);                                      \
 	}                                                             \
                                                                       \
-	if (m->m_len < sizeof(struct ether_header)) {                 \
-		m = m_pullup(m, sizeof(struct ether_header));         \
-		if (m == NULL)                                        \
+	if (m0->m_len < sizeof(struct ether_header)) {                \
+		m0 = m_pullup(m0, sizeof(struct ether_header));       \
+		if (m0 == NULL)                                       \
 			return (ENOBUFS);                             \
 	}                                                             \
+	t = m = m0;                                                       \
                                                                       \
-	return (if_input(ifp, m));                                    \
+	while (t->m_next != NULL)                                     \
+		t = t->m_next;                                        \
+                                                                      \
+	if (t->m_len == ETHER_CRC_LEN) {                              \
+		while (m->m_next != t)                                \
+			m = m->m_next;                                \
+                                                                      \
+		m->m_next = NULL;                                     \
+		m_freem(t);                                           \
+	}                                                             \
+                                                                      \
+    return (if_input(ifp, m0));                                   \
 }
 
 /*

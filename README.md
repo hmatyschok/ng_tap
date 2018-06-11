@@ -31,7 +31,7 @@ Legal Notice:
   
   (d) Marvell Yukon is a trademark of Marvell Technology Group Ltd.
  
-  (e) NetXtreme and NetLink are trademarks of Broadcom of Corp.
+  (e) NetXtreme and NetLink are trademarks of Broadcom Corp.
   
   (f) Don't use this software on production systems!
   
