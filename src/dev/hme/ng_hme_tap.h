@@ -24,10 +24,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MSK_NG_MSK_TAP_H_
-#define _MSK_NG_MSK_TAP_H_
+#ifndef _HME_NG_HME_TAP_H_
+#define _HME_NG_HME_TAP_H_
 
-/* Node name for ng_msk_tap(4) */
-#define NG_MSK_TAP_NODE_TYPE 	"msk_tap"
+/* Node name for ng_hme_tap(4) */
+#define NG_HME_TAP_NODE_TYPE 	"hme_tap"
 
-#endif /* _MSK_NG_MSK_TAP_H_ */
+#endif /* _HME_NG_HME_TAP_H_ */

@@ -134,7 +134,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/vr/if_vr.c 296272 2016-03-01 17:47:32Z j
 #include <dev/vr/ng_vr_tap.h>
 #include <netgraph/ng_tap.h>
 NG_TAP_MODULE(VR, vr, vr_softc, NG_VR_TAP_NODE_TYPE);
-#endif
+#endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
@@ -880,10 +880,6 @@ vr_detach(device_t dev)
 	KASSERT(mtx_initialized(&sc->vr_mtx), 
 		("vr mutex not initialized"));
 
-#ifdef NETGRAPH  
-	ng_vr_tap_detach(sc);
-#endif /* NETGRAPH */
-
 #ifdef DEVICE_POLLING
 	if (ifp != NULL && ifp->if_capenable & IFCAP_POLLING)
 		ether_poll_deregister(ifp);
@@ -892,6 +888,9 @@ vr_detach(device_t dev)
 	/* These should only be active if attach succeeded. */
 	if (device_is_attached(dev)) {
 		VR_LOCK(sc);
+#ifdef NETGRAPH  
+		ng_vr_tap_detach(sc);
+#endif /* NETGRAPH */		
 		sc->vr_flags |= VR_F_DETACHED;
 		vr_stop(sc);
 		VR_UNLOCK(sc);

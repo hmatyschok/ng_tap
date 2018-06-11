@@ -919,9 +919,7 @@ rl_detach(device_t dev)
 	ifp = sc->rl_ifp;
 
 	KASSERT(mtx_initialized(&sc->rl_mtx), ("rl mutex not initialized"));
-#ifdef NETGRAPH
-	ng_rl_tap_detach(sc);
-#endif /* NETGRAPH */
+
 #ifdef DEVICE_POLLING
 	if (ifp->if_capenable & IFCAP_POLLING)
 		ether_poll_deregister(ifp);
@@ -929,6 +927,9 @@ rl_detach(device_t dev)
 	/* These should only be active if attach succeeded */
 	if (device_is_attached(dev)) {
 		RL_LOCK(sc);
+#ifdef NETGRAPH
+		ng_rl_tap_detach(sc);
+#endif /* NETGRAPH */		
 		rl_stop(sc);
 		RL_UNLOCK(sc);
 		callout_drain(&sc->rl_stat_callout);

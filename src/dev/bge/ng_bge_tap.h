@@ -27,7 +27,7 @@
 #ifndef _BGE_NG_BGE_TAP_H_
 #define _BGE_NG_BGE_TAP_H_
 
-/* Node name for ng_vr_tap(4) */
+/* Node name for ng_bge_tap(4) */
 #define NG_BGE_TAP_NODE_TYPE 	"bge_tap"
 
 #endif /* _BGE_NG_BGE_TAP_H_ */

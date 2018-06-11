@@ -149,7 +149,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bge/if_bge.c 301103 2016-06-01 05:15:11Z
 #include <dev/bge/ng_bge_tap.h>
 #include <netgraph/ng_tap.h>
 NG_TAP_MODULE(BGE, bge, bge_softc, NG_BGE_TAP_NODE_TYPE);
-#endif
+#endif /* NETGRAPH */
 
 #define	BGE_CSUM_FEATURES	(CSUM_IP | CSUM_TCP)
 #define	ETHER_MIN_NOPAD		(ETHER_MIN_LEN - ETHER_CRC_LEN) /* i.e., 60 */
@@ -3990,11 +3990,7 @@ bge_detach(device_t dev)
 
 	sc = device_get_softc(dev);
 	ifp = sc->bge_ifp;
-
-#ifdef NETGRAPH  
-	ng_bge_tap_detach(sc);
-#endif /* NETGRAPH */
-
+	
 #ifdef DEVICE_POLLING
 	if (if_getcapenable(ifp) & IFCAP_POLLING)
 		ether_poll_deregister(ifp);
@@ -4003,6 +3999,9 @@ bge_detach(device_t dev)
 	if (device_is_attached(dev)) {
 		ether_ifdetach(ifp);
 		BGE_LOCK(sc);
+#ifdef NETGRAPH  
+		ng_bge_tap_detach(sc);
+#endif /* NETGRAPH */	
 		bge_stop(sc);
 		BGE_UNLOCK(sc);
 		callout_drain(&sc->bge_stat_ch);
