@@ -127,7 +127,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/hme/if_hme.c 271831 2014-09-18 21:07:05Z
 #include <dev/hme/if_hmereg.h>
 #include <dev/hme/if_hmevar.h>
 #ifdef NETGRAPH
-#include <dev/vr/ng_vr_tap.h>
+#include <dev/hme/ng_hme_tap.h>
 #include <netgraph/ng_tap.h>
 NG_TAP_MODULE(HME, hme, hme_softc, NG_HME_TAP_NODE_TYPE);
 #endif /* NETGRHAPH */
@@ -171,13 +171,13 @@ DRIVER_MODULE(miibus, hme, miibus_driver, miibus_devclass, 0, 0);
 MODULE_DEPEND(hme, miibus, 1, 1, 1);
 
 #define	HME_SPC_READ_4(spc, sc, offs) \
-	bus_space_read_4((sc)->sc_ ## spc ## t, (sc)->sc_ ## spc ## h, \
+	bus_space_read_4((sc)->hme_ ## spc ## t, (sc)->hme_ ## spc ## h, \
 	    (offs))
 #define	HME_SPC_WRITE_4(spc, sc, offs, v) \
-	bus_space_write_4((sc)->sc_ ## spc ## t, (sc)->sc_ ## spc ## h, \
+	bus_space_write_4((sc)->hme_ ## spc ## t, (sc)->hme_ ## spc ## h, \
 	    (offs), (v))
 #define	HME_SPC_BARRIER(spc, sc, offs, l, f) \
-	bus_space_barrier((sc)->sc_ ## spc ## t, (sc)->sc_ ## spc ## h, \
+	bus_space_barrier((sc)->hme_ ## spc ## t, (sc)->hme_ ## spc ## h, \
 	    (offs), (l), (f))
 
 #define	HME_SEB_READ_4(sc, offs)	HME_SPC_READ_4(seb, (sc), (offs))
@@ -927,7 +927,14 @@ hme_init_locked(struct hme_softc *sc)
 	/* step 12. RX_MAC Configuration Register */
 	v = HME_MAC_READ_4(sc, HME_MACI_RXCFG);
 	v |= HME_MAC_RXCFG_ENABLE;
+#ifdef NETGRAPH
+	if (sc->hme_tap_hook != NULL)
+		v |= (HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
+	else 
+		v &= ~(HME_MAC_RXCFG_DCRCS);
+#else	
 	v &= ~(HME_MAC_RXCFG_DCRCS);
+#endif /* ! NETGRAPH */
 	CTR1(KTR_HME, "hme_init: programming RX_MAC to %x", (u_int)v);
 	HME_MAC_WRITE_4(sc, HME_MACI_RXCFG, v);
 
@@ -1140,7 +1147,20 @@ hme_read(struct hme_softc *sc, int ix, int len, u_int32_t flags)
 		hme_rxcksum(m, flags);
 	/* Pass the packet up. */
 	HME_UNLOCK(sc);
-	(*ifp->if_input)(ifp, m);
+/*
+ * Very evil stuff comes here.. 
+ */		
+#ifdef NETGRAPH
+		if (sc->hme_tap_hook != NULL) {
+			ng_hme_tap_input(sc->hme_tap_hook, &m);
+			if (m != NULL) {
+				(*ifp->if_input)(ifp, m);
+			}
+		} else
+			(*ifp->if_input)(ifp, m);	
+#else
+		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */	
 	HME_LOCK(sc);
 }
 
@@ -1742,6 +1762,11 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		macc |= HME_MAC_RXCFG_PMISC;
+#ifdef NETGRAAPH 
+		if (sc->hme_tap_hook != NULL) {
+			macc |= (HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
+		}
+#endif /* NETGRAPH */		
 		goto chipit;
 	}
 	if ((ifp->if_flags & IFF_ALLMULTI) != 0) {

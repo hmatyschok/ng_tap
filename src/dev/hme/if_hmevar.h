@@ -55,9 +55,9 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
- /*
+
 #include "opt_netgraph.h"
- */
+
 #ifdef NETGRAPH
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>

@@ -9,13 +9,28 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
    
   This software is highly experimental, but _not_ tested, yet.  
    
- The implementaion of the targeted device driver was extented by 
- the implementaionof a so called netgraph(4) node. It's an object 
+ The implementation of the targeted device driver was extented by 
+ the implementaion of a so called netgraph(4) node. It's an object 
  oriented framework for implementing messege-passing within and
  between nodes of netgraph(4) domain(9). 
  
-  Only the device-driver for vr(4), re(4), rl(4) msk(4) and 
-  bge(4) devices are supported, but this may change.
+  Only the device-driver for 
+  
+   * vr(4), 
+    
+   * re(4),
+  
+   * rl(4),
+  
+   * msk(4), 
+  
+   * bge(4) 
+ 
+  and 
+  
+   * hme(4) 
+   
+  devices are supported, but this may change.
  
  The implementation relies on so called boilerplate code
  as defined as preprocessor macros in netgraph/ng_tap.h.
