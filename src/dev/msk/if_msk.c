@@ -2074,11 +2074,12 @@ msk_detach(device_t dev)
 	sc_if = device_get_softc(dev);
 	KASSERT(mtx_initialized(&sc_if->msk_softc->msk_mtx),
 	    ("msk mutex not initialized in msk_detach"));
-	MSK_IF_LOCK(sc_if);
 
-#ifdef NETGRAPH  
-	ng_msk_tap_detach(sc_if);
-#endif /* NETGRAPH */
+#ifdef NETGRAPH 
+	if (device_is_attached(dev)) 
+		ng_msk_tap_detach(sc_if);
+#endif /* NETGRAPH */	
+	MSK_IF_LOCK(sc_if);
 
 	ifp = sc_if->msk_ifp;
 	if (device_is_attached(dev)) {

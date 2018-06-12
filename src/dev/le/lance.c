@@ -91,6 +91,11 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/le/lance.c 315221 2017-03-14 02:06:03Z p
 
 #include <dev/le/lancereg.h>
 #include <dev/le/lancevar.h>
+#ifdef NETGRAPH
+#include <dev/le/ng_le_tap.h>
+#include <netgraph/ng_tap.h>
+NG_TAP_MODULE(LE, le, lance_softc, NG_LE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 devclass_t le_devclass;
 
@@ -111,11 +116,11 @@ lance_config(struct lance_softc *sc, const char* name, int unit)
 	if (LE_LOCK_INITIALIZED(sc) == 0)
 		return (ENXIO);
 
-	ifp = sc->sc_ifp = if_alloc(IFT_ETHER);
+	ifp = sc->le_ifp = if_alloc(IFT_ETHER);
 	if (ifp == NULL)
 		return (ENOSPC);
 
-	callout_init_mtx(&sc->sc_wdog_ch, &sc->sc_mtx, 0);
+	callout_init_mtx(&sc->le_wdog_ch, &sc->le_mtx, 0);
 
 	/* Initialize ifnet structure. */
 	ifp->if_softc = sc;
@@ -133,52 +138,52 @@ lance_config(struct lance_softc *sc, const char* name, int unit)
 	IFQ_SET_READY(&ifp->if_snd);
 
 	/* Initialize ifmedia structures. */
-	ifmedia_init(&sc->sc_media, 0, lance_mediachange, lance_mediastatus);
-	if (sc->sc_supmedia != NULL) {
-		for (i = 0; i < sc->sc_nsupmedia; i++)
-			ifmedia_add(&sc->sc_media, sc->sc_supmedia[i], 0, NULL);
-		ifmedia_set(&sc->sc_media, sc->sc_defaultmedia);
+	ifmedia_init(&sc->le_media, 0, lance_mediachange, lance_mediastatus);
+	if (sc->le_supmedia != NULL) {
+		for (i = 0; i < sc->le_nsupmedia; i++)
+			ifmedia_add(&sc->le_media, sc->le_supmedia[i], 0, NULL);
+		ifmedia_set(&sc->le_media, sc->le_defaultmedia);
 	} else {
-		ifmedia_add(&sc->sc_media,
+		ifmedia_add(&sc->le_media,
 		    IFM_MAKEWORD(IFM_ETHER, IFM_MANUAL, 0, 0), 0, NULL);
-		ifmedia_set(&sc->sc_media,
+		ifmedia_set(&sc->le_media,
 		    IFM_MAKEWORD(IFM_ETHER, IFM_MANUAL, 0, 0));
 	}
 
-	switch (sc->sc_memsize) {
+	switch (sc->le_memsize) {
 	case 8192:
-		sc->sc_nrbuf = 4;
-		sc->sc_ntbuf = 1;
+		sc->le_nrbuf = 4;
+		sc->le_ntbuf = 1;
 		break;
 	case 16384:
-		sc->sc_nrbuf = 8;
-		sc->sc_ntbuf = 2;
+		sc->le_nrbuf = 8;
+		sc->le_ntbuf = 2;
 		break;
 	case 32768:
-		sc->sc_nrbuf = 16;
-		sc->sc_ntbuf = 4;
+		sc->le_nrbuf = 16;
+		sc->le_ntbuf = 4;
 		break;
 	case 65536:
-		sc->sc_nrbuf = 32;
-		sc->sc_ntbuf = 8;
+		sc->le_nrbuf = 32;
+		sc->le_ntbuf = 8;
 		break;
 	case 131072:
-		sc->sc_nrbuf = 64;
-		sc->sc_ntbuf = 16;
+		sc->le_nrbuf = 64;
+		sc->le_ntbuf = 16;
 		break;
 	case 262144:
-		sc->sc_nrbuf = 128;
-		sc->sc_ntbuf = 32;
+		sc->le_nrbuf = 128;
+		sc->le_ntbuf = 32;
 		break;
 	default:
 		/* weird memory size; cope with it */
-		nbuf = sc->sc_memsize / LEBLEN;
-		sc->sc_ntbuf = nbuf / 5;
-		sc->sc_nrbuf = nbuf - sc->sc_ntbuf;
+		nbuf = sc->le_memsize / LEBLEN;
+		sc->le_ntbuf = nbuf / 5;
+		sc->le_nrbuf = nbuf - sc->le_ntbuf;
 	}
 
 	if_printf(ifp, "%d receive buffers, %d transmit buffers\n",
-	    sc->sc_nrbuf, sc->sc_ntbuf);
+	    sc->le_nrbuf, sc->le_ntbuf);
 
 	/* Make sure the chip is stopped. */
 	LE_LOCK(sc);
@@ -188,29 +193,38 @@ lance_config(struct lance_softc *sc, const char* name, int unit)
 	return (0);
 }
 
-void
+int
 lance_attach(struct lance_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 
 	/* Attach the interface. */
-	ether_ifattach(ifp, sc->sc_enaddr);
+	ether_ifattach(ifp, sc->le_enaddr);
 
 	/* Claim 802.1q capability. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 	ifp->if_capabilities |= IFCAP_VLAN_MTU;
 	ifp->if_capenable |= IFCAP_VLAN_MTU;
+	
+#ifdef NETGRAPH  
+	return (ng_le_tap_attach(sc));
+#else
+	return (0)
+#endif /* ! NETGRAPH */	
 }
 
 void
 lance_detach(struct lance_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 
-	LE_LOCK(sc);
+#ifdef NETGRAPH  
+	ng_le_tap_detach(sc);
+#endif /* NETGRAPH */
+	LE_LOCK(sc);	
 	lance_stop(sc);
 	LE_UNLOCK(sc);
-	callout_drain(&sc->sc_wdog_ch);
+	callout_drain(&sc->le_wdog_ch);
 	ether_ifdetach(ifp);
 	if_free(ifp);
 }
@@ -229,7 +243,7 @@ lance_resume(struct lance_softc *sc)
 {
 
 	LE_LOCK(sc);
-	if (sc->sc_ifp->if_flags & IFF_UP)
+	if (sc->le_ifp->if_flags & IFF_UP)
 		lance_init_locked(sc);
 	LE_UNLOCK(sc);
 }
@@ -240,14 +254,14 @@ lance_start(struct ifnet *ifp)
 	struct lance_softc *sc = ifp->if_softc;
 
 	LE_LOCK(sc);
-	(*sc->sc_start_locked)(sc);
+	(*sc->le_start_locked)(sc);
 	LE_UNLOCK(sc);
 }
 
 static void
 lance_stop(struct lance_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 
 	LE_LOCK_ASSERT(sc, MA_OWNED);
 
@@ -255,10 +269,10 @@ lance_stop(struct lance_softc *sc)
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
 	ifp->if_drv_flags &= ~(IFF_DRV_RUNNING | IFF_DRV_OACTIVE);
-	callout_stop(&sc->sc_wdog_ch);
-	sc->sc_wdog_timer = 0;
+	callout_stop(&sc->le_wdog_ch);
+	sc->le_wdog_timer = 0;
 
-	(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_STOP);
+	(*sc->le_wrcsr)(sc, LE_CSR0, LE_C0_STOP);
 }
 
 static void
@@ -278,62 +292,62 @@ lance_init(void *xsc)
 void
 lance_init_locked(struct lance_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 	u_long a;
 	int timo;
 
 	LE_LOCK_ASSERT(sc, MA_OWNED);
 
-	(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_STOP);
+	(*sc->le_wrcsr)(sc, LE_CSR0, LE_C0_STOP);
 	DELAY(100);
 
 	/* Newer LANCE chips have a reset register. */
-	if (sc->sc_hwreset)
-		(*sc->sc_hwreset)(sc);
+	if (sc->le_hwreset)
+		(*sc->le_hwreset)(sc);
 
 	/* Set the correct byte swapping mode, etc. */
-	(*sc->sc_wrcsr)(sc, LE_CSR3, sc->sc_conf3);
+	(*sc->le_wrcsr)(sc, LE_CSR3, sc->le_conf3);
 
 	/* Set the current media. This may require the chip to be stopped. */
-	if (sc->sc_mediachange)
-		(void)(*sc->sc_mediachange)(sc);
+	if (sc->le_mediachange)
+		(void)(*sc->le_mediachange)(sc);
 
 	/*
 	 * Update our private copy of the Ethernet address.
 	 * We NEED the copy so we can ensure its alignment!
 	 */
-	memcpy(sc->sc_enaddr, IF_LLADDR(ifp), ETHER_ADDR_LEN);
+	memcpy(sc->le_enaddr, IF_LLADDR(ifp), ETHER_ADDR_LEN);
 
 	/* Set up LANCE init block. */
-	(*sc->sc_meminit)(sc);
+	(*sc->le_meminit)(sc);
 
 	/* Give LANCE the physical address of its init block. */
-	a = sc->sc_addr + LE_INITADDR(sc);
-	(*sc->sc_wrcsr)(sc, LE_CSR1, a & 0xffff);
-	(*sc->sc_wrcsr)(sc, LE_CSR2, a >> 16);
+	a = sc->le_addr + LE_INITADDR(sc);
+	(*sc->le_wrcsr)(sc, LE_CSR1, a & 0xffff);
+	(*sc->le_wrcsr)(sc, LE_CSR2, a >> 16);
 
 	/* Try to initialize the LANCE. */
 	DELAY(100);
-	(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_INIT);
+	(*sc->le_wrcsr)(sc, LE_CSR0, LE_C0_INIT);
 
 	/* Wait for initialization to finish. */
 	for (timo = 100000; timo; timo--)
-		if ((*sc->sc_rdcsr)(sc, LE_CSR0) & LE_C0_IDON)
+		if ((*sc->le_rdcsr)(sc, LE_CSR0) & LE_C0_IDON)
 			break;
 
-	if ((*sc->sc_rdcsr)(sc, LE_CSR0) & LE_C0_IDON) {
+	if ((*sc->le_rdcsr)(sc, LE_CSR0) & LE_C0_IDON) {
 		/* Start the LANCE. */
-		(*sc->sc_wrcsr)(sc, LE_CSR0, LE_C0_INEA | LE_C0_STRT);
+		(*sc->le_wrcsr)(sc, LE_CSR0, LE_C0_INEA | LE_C0_STRT);
 		ifp->if_drv_flags |= IFF_DRV_RUNNING;
 		ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-		sc->sc_wdog_timer = 0;
-		callout_reset(&sc->sc_wdog_ch, hz, lance_watchdog, sc);
-		(*sc->sc_start_locked)(sc);
+		sc->le_wdog_timer = 0;
+		callout_reset(&sc->le_wdog_ch, hz, lance_watchdog, sc);
+		(*sc->le_start_locked)(sc);
 	} else
 		if_printf(ifp, "controller failed to initialize\n");
 
-	if (sc->sc_hwinit)
-		(*sc->sc_hwinit)(sc);
+	if (sc->le_hwinit)
+		(*sc->le_hwinit)(sc);
 }
 
 /*
@@ -355,14 +369,14 @@ lance_put(struct lance_softc *sc, int boff, struct mbuf *m)
 			m = NULL;
 			continue;
 		}
-		(*sc->sc_copytobuf)(sc, mtod(m, caddr_t), boff, len);
+		(*sc->le_copytobuf)(sc, mtod(m, caddr_t), boff, len);
 		boff += len;
 		tlen += len;
 		n = m_free(m);
 		m = NULL;
 	}
 	if (tlen < LEMINSIZE) {
-		(*sc->sc_zerobuf)(sc, boff, LEMINSIZE - tlen);
+		(*sc->le_zerobuf)(sc, boff, LEMINSIZE - tlen);
 		tlen = LEMINSIZE;
 	}
 	return (tlen);
@@ -377,7 +391,7 @@ lance_put(struct lance_softc *sc, int boff, struct mbuf *m)
 struct mbuf *
 lance_get(struct lance_softc *sc, int boff, int totlen)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 	struct mbuf *m, *m0, *newm;
 	caddr_t newdata;
 	int len;
@@ -412,7 +426,7 @@ lance_get(struct lance_softc *sc, int boff, int totlen)
 		}
 
 		m->m_len = len = min(totlen, len);
-		(*sc->sc_copyfrombuf)(sc, mtod(m, caddr_t), boff, len);
+		(*sc->le_copyfrombuf)(sc, mtod(m, caddr_t), boff, len);
 		boff += len;
 
 		totlen -= len;
@@ -436,12 +450,12 @@ static void
 lance_watchdog(void *xsc)
 {
 	struct lance_softc *sc = (struct lance_softc *)xsc;
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 
 	LE_LOCK_ASSERT(sc, MA_OWNED);
 
-	if (sc->sc_wdog_timer == 0 || --sc->sc_wdog_timer != 0) {
-		callout_reset(&sc->sc_wdog_ch, hz, lance_watchdog, sc);
+	if (sc->le_wdog_timer == 0 || --sc->le_wdog_timer != 0) {
+		callout_reset(&sc->le_wdog_ch, hz, lance_watchdog, sc);
 		return;
 	}
 
@@ -455,7 +469,7 @@ lance_mediachange(struct ifnet *ifp)
 {
 	struct lance_softc *sc = ifp->if_softc;
 
-	if (sc->sc_mediachange) {
+	if (sc->le_mediachange) {
 		/*
 		 * For setting the port in LE_CSR15 the PCnet chips must
 		 * be powered down or stopped and unlike documented may
@@ -467,7 +481,7 @@ lance_mediachange(struct ifnet *ifp)
 		lance_stop(sc);
 		lance_init_locked(sc);
 		if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
-			(*sc->sc_start_locked)(sc);
+			(*sc->le_start_locked)(sc);
 		LE_UNLOCK(sc);
 	}
 	return (0);
@@ -485,11 +499,11 @@ lance_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 	}
 
 	ifmr->ifm_status = IFM_AVALID;
-	if (sc->sc_flags & LE_CARRIER)
+	if (sc->le_flags & LE_CARRIER)
 		ifmr->ifm_status |= IFM_ACTIVE;
 
-	if (sc->sc_mediastatus)
-		(*sc->sc_mediastatus)(sc, ifmr);
+	if (sc->le_mediastatus)
+		(*sc->le_mediastatus)(sc, ifmr);
 	LE_UNLOCK(sc);
 }
 
@@ -507,22 +521,22 @@ lance_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCSIFFLAGS:
 		LE_LOCK(sc);
 		if (ifp->if_flags & IFF_PROMISC) {
-			if (!(sc->sc_flags & LE_PROMISC)) {
-				sc->sc_flags |= LE_PROMISC;
+			if (!(sc->le_flags & LE_PROMISC)) {
+				sc->le_flags |= LE_PROMISC;
 				lance_init_locked(sc);
 			}
-		} else if (sc->sc_flags & LE_PROMISC) {
-			sc->sc_flags &= ~LE_PROMISC;
+		} else if (sc->le_flags & LE_PROMISC) {
+			sc->le_flags &= ~LE_PROMISC;
 			lance_init_locked(sc);
 		}
 
 		if ((ifp->if_flags & IFF_ALLMULTI) &&
-		    !(sc->sc_flags & LE_ALLMULTI)) {
-			sc->sc_flags |= LE_ALLMULTI;
+		    !(sc->le_flags & LE_ALLMULTI)) {
+			sc->le_flags |= LE_ALLMULTI;
 			lance_init_locked(sc);
 		} else if (!(ifp->if_flags & IFF_ALLMULTI) &&
-		    (sc->sc_flags & LE_ALLMULTI)) {
-			sc->sc_flags &= ~LE_ALLMULTI;
+		    (sc->le_flags & LE_ALLMULTI)) {
+			sc->le_flags &= ~LE_ALLMULTI;
 			lance_init_locked(sc);
 		}
 
@@ -543,9 +557,9 @@ lance_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 #ifdef LEDEBUG
 		if (ifp->if_flags & IFF_DEBUG)
-			sc->sc_flags |= LE_DEBUG;
+			sc->le_flags |= LE_DEBUG;
 		else
-			sc->sc_flags &= ~LE_DEBUG;
+			sc->le_flags &= ~LE_DEBUG;
 #endif
 		LE_UNLOCK(sc);
 		break;
@@ -564,7 +578,7 @@ lance_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCGIFMEDIA:
 	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
+		error = ifmedia_ioctl(ifp, ifr, &sc->le_media, cmd);
 		break;
 
 	default:
@@ -581,7 +595,7 @@ lance_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 void
 lance_setladrf(struct lance_softc *sc, uint16_t *af)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->le_ifp;
 	struct ifmultiaddr *ifma;
 	uint32_t crc;
 
@@ -593,7 +607,7 @@ lance_setladrf(struct lance_softc *sc, uint16_t *af)
 	 * the word.
 	 */
 
-	if (ifp->if_flags & IFF_PROMISC || sc->sc_flags & LE_ALLMULTI) {
+	if (ifp->if_flags & IFF_PROMISC || sc->le_flags & LE_ALLMULTI) {
 		af[0] = af[1] = af[2] = af[3] = 0xffff;
 		return;
 	}
@@ -635,7 +649,7 @@ lance_setladrf(struct lance_softc *sc, uint16_t *af)
 void
 lance_copytobuf_contig(struct lance_softc *sc, void *from, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -646,7 +660,7 @@ lance_copytobuf_contig(struct lance_softc *sc, void *from, int boff, int len)
 void
 lance_copyfrombuf_contig(struct lance_softc *sc, void *to, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -657,7 +671,7 @@ lance_copyfrombuf_contig(struct lance_softc *sc, void *to, int boff, int len)
 void
 lance_zerobuf_contig(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 
 	/*
 	 * Just let memset() do the work
@@ -681,7 +695,7 @@ lance_zerobuf_contig(struct lance_softc *sc, int boff, int len)
 static void
 lance_copytobuf_gap2(struct lance_softc *sc, void *fromv, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	caddr_t from = fromv;
 	volatile uint16_t *bptr;
 
@@ -706,7 +720,7 @@ lance_copytobuf_gap2(struct lance_softc *sc, void *fromv, int boff, int len)
 static void
 lance_copyfrombuf_gap2(struct lance_softc *sc, void *tov, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	caddr_t to = tov;
 	volatile uint16_t *bptr;
 	uint16_t tmp;
@@ -733,7 +747,7 @@ lance_copyfrombuf_gap2(struct lance_softc *sc, void *tov, int boff, int len)
 static void
 lance_zerobuf_gap2(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	volatile uint16_t *bptr;
 
 	if ((unsigned)boff & 0x1) {
@@ -759,7 +773,7 @@ lance_zerobuf_gap2(struct lance_softc *sc, int boff, int len)
 static void
 lance_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	caddr_t bptr, from = fromv;
 	int xfer;
 
@@ -779,7 +793,7 @@ lance_copytobuf_gap16(struct lance_softc *sc, void *fromv, int boff, int len)
 static void
 lance_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	caddr_t bptr, to = tov;
 	int xfer;
 
@@ -799,7 +813,7 @@ lance_copyfrombuf_gap16(struct lance_softc *sc, void *tov, int boff, int len)
 static void
 lance_zerobuf_gap16(struct lance_softc *sc, int boff, int len)
 {
-	volatile caddr_t buf = sc->sc_mem;
+	volatile caddr_t buf = sc->le_mem;
 	caddr_t bptr;
 	int xfer;
 

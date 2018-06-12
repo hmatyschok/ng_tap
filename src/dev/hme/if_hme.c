@@ -441,11 +441,11 @@ hme_detach(struct hme_softc *sc)
 {
 	struct ifnet *ifp = sc->hme_ifp;
 	int i;
-
-	HME_LOCK(sc);
+	
 #ifdef NETGRAPH  
 	ng_hme_tap_detach(sc);
 #endif /* NETGRAPH */
+	HME_LOCK(sc);
 	hme_stop(sc);
 	HME_UNLOCK(sc);
 	callout_drain(&sc->hme_tick_ch);

@@ -885,12 +885,12 @@ vr_detach(device_t dev)
 
 	/* These should only be active if attach succeeded. */
 	if (device_is_attached(dev)) {
-		VR_LOCK(sc);
 #ifdef NETGRAPH  
 		ng_vr_tap_detach(sc);
-#endif /* NETGRAPH */		
+#endif /* NETGRAPH */
+		VR_LOCK(sc);				
 		sc->vr_flags |= VR_F_DETACHED;
-		vr_stop(sc);
+		vr_stop(sc);		
 		VR_UNLOCK(sc);
 		callout_drain(&sc->vr_stat_callout);
 		taskqueue_drain(taskqueue_fast, &sc->vr_inttask);

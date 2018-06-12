@@ -127,9 +127,7 @@ am7990_config(struct am7990_softc *sc, const char* name, int unit)
 	if (mem > sc->lsc.sc_memsize)
 		panic("%s: memsize", __func__);
 
-	lance_attach(&sc->lsc);
-
-	return (0);
+	return (lance_attach(&sc->lsc));
 }
 
 void

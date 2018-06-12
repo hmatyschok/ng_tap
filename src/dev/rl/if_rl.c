@@ -925,10 +925,10 @@ rl_detach(device_t dev)
 #endif
 	/* These should only be active if attach succeeded */
 	if (device_is_attached(dev)) {
-		RL_LOCK(sc);
 #ifdef NETGRAPH
 		ng_rl_tap_detach(sc);
-#endif /* NETGRAPH */		
+#endif /* NETGRAPH */
+		RL_LOCK(sc);		
 		rl_stop(sc);
 		RL_UNLOCK(sc);
 		callout_drain(&sc->rl_stat_callout);

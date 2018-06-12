@@ -1803,11 +1803,11 @@ re_detach(device_t dev)
 #ifdef DEVICE_POLLING
 		if (ifp->if_capenable & IFCAP_POLLING)
 			ether_poll_deregister(ifp);
-#endif
-		RL_LOCK(sc);
+#endif	
 #ifdef NETGRAPH
 		ng_rl_tap_detach(sc);
-#endif /* NETGRAPH */		
+#endif /* NETGRAPH */
+		RL_LOCK(sc);	
 #if 0
 		sc->suspended = 1;
 #endif

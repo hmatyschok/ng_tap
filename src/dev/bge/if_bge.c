@@ -3996,12 +3996,12 @@ bge_detach(device_t dev)
 #endif
 
 	if (device_is_attached(dev)) {
-		ether_ifdetach(ifp);
-		BGE_LOCK(sc);
-#ifdef NETGRAPH  
+#ifdef NETGRAPH
 		ng_bge_tap_detach(sc);
-#endif /* NETGRAPH */	
-		bge_stop(sc);
+#endif /* NETGRAPH */		
+		ether_ifdetach(ifp);
+		BGE_LOCK(sc);	
+		bge_stop(sc);		
 		BGE_UNLOCK(sc);
 		callout_drain(&sc->bge_stat_ch);
 	}
