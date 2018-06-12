@@ -96,8 +96,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/vr/if_vr.c 296272 2016-03-01 17:47:32Z j
 #include "opt_device_polling.h"
 #endif
 
-#include "opt_netgraph.h"
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/bus.h>

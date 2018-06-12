@@ -931,7 +931,7 @@ hme_init_locked(struct hme_softc *sc)
 	if (sc->hme_tap_hook != NULL)
 		v |= (HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
 	else 
-		v &= ~(HME_MAC_RXCFG_DCRCS);
+		v &= ~(HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
 #else	
 	v &= ~(HME_MAC_RXCFG_DCRCS);
 #endif /* ! NETGRAPH */

@@ -93,7 +93,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bge/if_bge.c 301103 2016-06-01 05:15:11Z
 #ifdef HAVE_KERNEL_OPTION_HEADERS
 #include "opt_device_polling.h"
 #endif
-#include "opt_netgraph.h"
 
 #include <sys/param.h>
 #include <sys/endian.h>
