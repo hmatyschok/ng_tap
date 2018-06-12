@@ -147,9 +147,10 @@ struct lance_softc {
 #define	LE_CARRIER	(1 << 2)
 #define	LE_DEBUG	(1 << 3)
 #define	LE_PROMISC	(1 << 4)
+
 #ifdef NETGRAPH
-	node_p 	hme_tap_node;
-	hook_p 	hme_tap_hook;
+	node_p 	le_tap_node;
+	hook_p 	le_tap_hook;
 #endif /* NETGRAPH */
 };
 
