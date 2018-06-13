@@ -417,11 +417,21 @@ struct mbuf *
 lance_get(struct lance_softc *sc, int boff, int totlen)
 {
 	struct ifnet *ifp = sc->le_ifp;
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETGRAPH */	
 	struct mbuf *m, *m0, *newm;
 	caddr_t newdata;
 	int len;
 
+#ifdef NETGRAPH 
+	ether_crc_len = (sc->le_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+
+	if (totlen <= ETHER_HDR_LEN || totlen > LEBLEN - ether_crc_len) {
+#else
 	if (totlen <= ETHER_HDR_LEN || totlen > LEBLEN - ETHER_CRC_LEN) {
+#endif /* ! NETGRAPH */
+
 #ifdef LEDEBUG
 		if_printf(ifp, "invalid packet size %d; dropping\n", totlen);
 #endif
