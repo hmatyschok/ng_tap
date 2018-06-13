@@ -244,6 +244,15 @@ static struct ng_type ng_##device##_tap_type = {                      \
 
 /* Service primitives. */
 
+#define NG_TAP_ATTACH_DECLARE_FN(device, ctx)                         \
+int 	ng_##device##_tap_attach(struct ctx *);
+
+#define NG_TAP_DETACH_DECLARE_FN(device, ctx)                         \
+void 	ng_##device##_tap_detach(struct ctx *);
+
+#define NG_TAP_INPUT_DECLARE_FN(device) 							  \
+void 	ng_##device##_tap_input(hook_p, struct mbuf **);
+
 /* 
  * Attach instance of xxx(4) NIC with netgraph(4) node.
  * 
@@ -252,7 +261,7 @@ static struct ng_type ng_##device##_tap_type = {                      \
  * This is effectively ng_xxx_tap_constructor(9).
  */
 #define NG_TAP_ATTACH_DECLARE(device, ctx)                            \
-static int                                                            \
+int                                                                   \
 ng_##device##_tap_attach(struct ctx *sc)                              \
 {                                                                     \
 	char name[IFNAMSIZ];                                          \
@@ -310,7 +319,7 @@ bad:                                                                  \
  * went wrong. This is effectively ng_device_tap_destructor(9).
  */
 #define NG_TAP_DETACH_DECLARE(device, ctx)                            \
-static void                                                           \
+void                                                           \
 ng_##device##_tap_detach(struct ctx *sc)                              \
 {                                                                     \
 	if (NG_NODE_PRIVATE(sc->device##_tap_node)) {                 \
@@ -321,6 +330,8 @@ ng_##device##_tap_detach(struct ctx *sc)                              \
 			ng_rmtype(&ng_##device##_tap_type);           \
 		else                                                  \
 			atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
+                                                                      \
+		sc->device##_tap_node = NULL;                         \
 	}                                                             \
 }
 
@@ -330,7 +341,7 @@ ng_##device##_tap_detach(struct ctx *sc)                              \
  * to the netgraph(4) protocol domain(9).
  */
 #define NG_TAP_INPUT_DECLARE(device) 							\
-static void 													\
+void 													\
 ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 { 																\
 	struct mbuf *t, *m; 										\
@@ -367,8 +378,12 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 	NG_TAP_RCVMSG_DECLARE(device, ctx) 							\
 	NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx) 				\
 	NG_TAP_TYPE_DECLARE(device, str) 							\
+	NG_TAP_ATTACH_DECLARE_FN(device, ctx)                       \
+	NG_TAP_DETACH_DECLARE_FN(device, ctx) 		                \
+	NG_TAP_INPUT_DECLARE_FN(device)                             \
 	NG_TAP_ATTACH_DECLARE(device, ctx) 							\
 	NG_TAP_DETACH_DECLARE(device, ctx)							\
 	NG_TAP_INPUT_DECLARE(device)
+
 #endif /* _KERNEL */
 #endif /* _NETGRAPH_NG_TAP_H_ */

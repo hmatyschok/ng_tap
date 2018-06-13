@@ -169,7 +169,7 @@ le_dma_setaui(struct lance_softc *sc)
 static int
 le_dma_supmediachange(struct lance_softc *sc)
 {
-	struct ifmedia *ifm = &sc->sc_media;
+	struct ifmedia *ifm = &sc->le_media;
 
 	if (IFM_TYPE(ifm->ifm_media) != IFM_ETHER)
 		return (EINVAL);
@@ -262,18 +262,18 @@ le_dma_nocarrier(struct lance_softc *sc)
 	 */
 
 	if (L64854_GCSR(lesc->sc_dma) & E_TP_AUI) {
-		switch (IFM_SUBTYPE(sc->sc_media.ifm_media)) {
+		switch (IFM_SUBTYPE(sc->le_media.ifm_media)) {
 		case IFM_10_5:
 		case IFM_AUTO:
-			if_printf(sc->sc_ifp, "lost carrier on UTP port, "
+			if_printf(sc->le_ifp, "lost carrier on UTP port, "
 			    "switching to AUI port\n");
 			le_dma_setaui(sc);
 		}
 	} else {
-		switch (IFM_SUBTYPE(sc->sc_media.ifm_media)) {
+		switch (IFM_SUBTYPE(sc->le_media.ifm_media)) {
 		case IFM_10_T:
 		case IFM_AUTO:
-			if_printf(sc->sc_ifp, "lost carrier on AUI port, "
+			if_printf(sc->le_ifp, "lost carrier on AUI port, "
 			    "switching to UTP port\n");
 			le_dma_setutp(sc);
 		}
@@ -347,7 +347,7 @@ le_dma_attach(device_t dev)
 		goto fail_ires;
 	}
 
-	sc->sc_memsize = LEDMA_MEMSIZE;
+	sc->le_memsize = LEDMA_MEMSIZE;
 	error = bus_dma_tag_create(
 	    dma->sc_parent_dmat,	/* parent */
 	    LEDMA_ALIGNMENT,		/* alignment */
@@ -355,9 +355,9 @@ le_dma_attach(device_t dev)
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    sc->sc_memsize,		/* maxsize */
+	    sc->le_memsize,		/* maxsize */
 	    1,				/* nsegments */
-	    sc->sc_memsize,		/* maxsegsize */
+	    sc->le_memsize,		/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &lesc->sc_dmat);
@@ -366,7 +366,7 @@ le_dma_attach(device_t dev)
 		goto fail_lsi;
 	}
 
-	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->sc_mem,
+	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->le_mem,
 	    BUS_DMA_WAITOK | BUS_DMA_COHERENT, &lesc->sc_dmam);
 	if (error != 0) {
 		device_printf(dev, "cannot allocate DMA buffer memory\n");
@@ -374,36 +374,36 @@ le_dma_attach(device_t dev)
 	}
 
 	lesc->sc_laddr = 0;
-	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->sc_mem,
-	    sc->sc_memsize, le_dma_dma_callback, lesc, 0);
+	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->le_mem,
+	    sc->le_memsize, le_dma_dma_callback, lesc, 0);
 	if (error != 0 || lesc->sc_laddr == 0) {
 		device_printf(dev, "cannot load DMA buffer map\n");
 		goto fail_dmem;
 	}
 
-	sc->sc_addr = lesc->sc_laddr & 0xffffff;
-	sc->sc_flags = 0;
-	sc->sc_conf3 = LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON;
+	sc->le_addr = lesc->sc_laddr & 0xffffff;
+	sc->le_flags = 0;
+	sc->le_conf3 = LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON;
 
-	sc->sc_mediachange = le_dma_supmediachange;
-	sc->sc_mediastatus = le_dma_supmediastatus;
-	sc->sc_supmedia = le_dma_supmedia;
-	sc->sc_nsupmedia = nitems(le_dma_supmedia);
-	sc->sc_defaultmedia = le_dma_supmedia[0];
+	sc->le_mediachange = le_dma_supmediachange;
+	sc->le_mediastatus = le_dma_supmediastatus;
+	sc->le_supmedia = le_dma_supmedia;
+	sc->le_nsupmedia = nitems(le_dma_supmedia);
+	sc->le_defaultmedia = le_dma_supmedia[0];
 
-	OF_getetheraddr(dev, sc->sc_enaddr);
+	OF_getetheraddr(dev, sc->le_enaddr);
 
-	sc->sc_copytodesc = lance_copytobuf_contig;
-	sc->sc_copyfromdesc = lance_copyfrombuf_contig;
-	sc->sc_copytobuf = lance_copytobuf_contig;
-	sc->sc_copyfrombuf = lance_copyfrombuf_contig;
-	sc->sc_zerobuf = lance_zerobuf_contig;
+	sc->le_copytodesc = lance_copytobuf_contig;
+	sc->le_copyfromdesc = lance_copyfrombuf_contig;
+	sc->le_copytobuf = lance_copytobuf_contig;
+	sc->le_copyfrombuf = lance_copyfrombuf_contig;
+	sc->le_zerobuf = lance_zerobuf_contig;
 
-	sc->sc_rdcsr = le_dma_rdcsr;
-	sc->sc_wrcsr = le_dma_wrcsr;
-	sc->sc_hwreset = le_dma_hwreset;
-	sc->sc_hwintr = le_dma_hwintr;
-	sc->sc_nocarrier = le_dma_nocarrier;
+	sc->le_rdcsr = le_dma_rdcsr;
+	sc->le_wrcsr = le_dma_wrcsr;
+	sc->le_hwreset = le_dma_hwreset;
+	sc->le_hwintr = le_dma_hwintr;
+	sc->le_nocarrier = le_dma_nocarrier;
 
 	error = am7990_config(&lesc->sc_am7990, device_get_name(dev),
 	    device_get_unit(dev));
@@ -426,7 +426,7 @@ le_dma_attach(device_t dev)
  fail_dmap:
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
  fail_dmem:
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
  fail_dtag:
 	bus_dma_tag_destroy(lesc->sc_dmat);
  fail_lsi:
@@ -455,7 +455,7 @@ le_dma_detach(device_t dev)
 	bus_teardown_intr(dev, lesc->sc_ires, lesc->sc_ih);
 	am7990_detach(&lesc->sc_am7990);
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
 	bus_dma_tag_destroy(lesc->sc_dmat);
 	error = lsi64854_detach(lesc->sc_dma);
 	if (error != 0)

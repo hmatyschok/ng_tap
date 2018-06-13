@@ -195,7 +195,7 @@ le_isa_dma_callback(void *xsc, bus_dma_segment_t *segs, int nsegs, int error)
 	if (error != 0)
 		return;
 	KASSERT(nsegs == 1, ("%s: bad DMA segment count", __func__));
-	sc->sc_addr = segs[0].ds_addr;
+	sc->le_addr = segs[0].ds_addr;
 }
 
 static int
@@ -340,7 +340,7 @@ le_isa_attach(device_t dev)
 		goto fail_ires;
 	}
 
-	sc->sc_memsize = LE_ISA_MEMSIZE;
+	sc->le_memsize = LE_ISA_MEMSIZE;
 	/*
 	 * For Am79C90, Am79C961 and Am79C961A the init block must be 2-byte
 	 * aligned and the ring descriptors must be 8-byte aligned.
@@ -351,9 +351,9 @@ le_isa_attach(device_t dev)
 	    BUS_SPACE_MAXADDR_24BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    sc->sc_memsize,		/* maxsize */
+	    sc->le_memsize,		/* maxsize */
 	    1,				/* nsegments */
-	    sc->sc_memsize,		/* maxsegsize */
+	    sc->le_memsize,		/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &lesc->sc_dmat);
@@ -362,48 +362,48 @@ le_isa_attach(device_t dev)
 		goto fail_pdtag;
 	}
 
-	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->sc_mem,
+	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->le_mem,
 	    BUS_DMA_WAITOK | BUS_DMA_COHERENT, &lesc->sc_dmam);
 	if (error != 0) {
 		device_printf(dev, "cannot allocate DMA buffer memory\n");
 		goto fail_dtag;
 	}
 
-	sc->sc_addr = 0;
-	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->sc_mem,
-	    sc->sc_memsize, le_isa_dma_callback, sc, 0);
-	if (error != 0 || sc->sc_addr == 0) {
+	sc->le_addr = 0;
+	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->le_mem,
+	    sc->le_memsize, le_isa_dma_callback, sc, 0);
+	if (error != 0 || sc->le_addr == 0) {
 		device_printf(dev, "cannot load DMA buffer map\n");
 		goto fail_dmem;
 	}
 
 	isa_dmacascade(rman_get_start(lesc->sc_dres));
 
-	sc->sc_flags = 0;
-	sc->sc_conf3 = 0;
+	sc->le_flags = 0;
+	sc->le_conf3 = 0;
 
 	/*
 	 * Extract the physical MAC address from the ROM.
 	 */
-	for (i = 0; i < sizeof(sc->sc_enaddr); i++)
-		sc->sc_enaddr[i] = bus_read_1(lesc->sc_rres,
+	for (i = 0; i < sizeof(sc->le_enaddr); i++)
+		sc->le_enaddr[i] = bus_read_1(lesc->sc_rres,
 		    macstart + i * macstride);
 
-	sc->sc_copytodesc = lance_copytobuf_contig;
-	sc->sc_copyfromdesc = lance_copyfrombuf_contig;
-	sc->sc_copytobuf = lance_copytobuf_contig;
-	sc->sc_copyfrombuf = lance_copyfrombuf_contig;
-	sc->sc_zerobuf = lance_zerobuf_contig;
+	sc->le_copytodesc = lance_copytobuf_contig;
+	sc->le_copyfromdesc = lance_copyfrombuf_contig;
+	sc->le_copytobuf = lance_copytobuf_contig;
+	sc->le_copyfrombuf = lance_copyfrombuf_contig;
+	sc->le_zerobuf = lance_zerobuf_contig;
 
-	sc->sc_rdcsr = le_isa_rdcsr;
-	sc->sc_wrcsr = le_isa_wrcsr;
-	sc->sc_hwreset = NULL;
-	sc->sc_hwinit = NULL;
-	sc->sc_hwintr = NULL;
-	sc->sc_nocarrier = NULL;
-	sc->sc_mediachange = NULL;
-	sc->sc_mediastatus = NULL;
-	sc->sc_supmedia = NULL;
+	sc->le_rdcsr = le_isa_rdcsr;
+	sc->le_wrcsr = le_isa_wrcsr;
+	sc->le_hwreset = NULL;
+	sc->le_hwinit = NULL;
+	sc->le_hwintr = NULL;
+	sc->le_nocarrier = NULL;
+	sc->le_mediachange = NULL;
+	sc->le_mediastatus = NULL;
+	sc->le_supmedia = NULL;
 
 	error = am7990_config(&lesc->sc_am7990, device_get_name(dev),
 	    device_get_unit(dev));
@@ -426,7 +426,7 @@ le_isa_attach(device_t dev)
  fail_dmap:
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
  fail_dmem:
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
  fail_dtag:
 	bus_dma_tag_destroy(lesc->sc_dmat);
  fail_pdtag:
@@ -457,7 +457,7 @@ le_isa_detach(device_t dev)
 	bus_teardown_intr(dev, lesc->sc_ires, lesc->sc_ih);
 	am7990_detach(&lesc->sc_am7990);
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
 	bus_dma_tag_destroy(lesc->sc_dmat);
 	bus_dma_tag_destroy(lesc->sc_pdmat);
 	bus_release_resource(dev, SYS_RES_IRQ,

@@ -122,11 +122,11 @@
 /* LEMINSIZE should be ETHER_MIN_LEN when LE_MODE_DTCR is set. */
 #define	LEMINSIZE	(ETHER_MIN_LEN - ETHER_CRC_LEN)
 
-#define	LE_INITADDR(sc)		(sc->sc_initaddr)
-#define	LE_RMDADDR(sc, bix)	(sc->sc_rmdaddr + sizeof(struct lermd) * (bix))
-#define	LE_TMDADDR(sc, bix)	(sc->sc_tmdaddr + sizeof(struct letmd) * (bix))
-#define	LE_RBUFADDR(sc, bix)	(sc->sc_rbufaddr + LEBLEN * (bix))
-#define	LE_TBUFADDR(sc, bix)	(sc->sc_tbufaddr + LEBLEN * (bix))
+#define	LE_INITADDR(sc)		(sc->le_initaddr)
+#define	LE_RMDADDR(sc, bix)	(sc->le_rmdaddr + sizeof(struct lermd) * (bix))
+#define	LE_TMDADDR(sc, bix)	(sc->le_tmdaddr + sizeof(struct letmd) * (bix))
+#define	LE_RBUFADDR(sc, bix)	(sc->le_rbufaddr + LEBLEN * (bix))
+#define	LE_TBUFADDR(sc, bix)	(sc->le_tbufaddr + LEBLEN * (bix))
 
 /*
  * The byte count fields in descriptors are in two's complement.

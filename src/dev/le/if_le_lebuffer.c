@@ -275,42 +275,42 @@ le_lebuffer_attach(device_t dev)
 
 	/*
 	 * LANCE view is offset by buffer location.
-	 * Note that we don't use sc->sc_mem.
+	 * Note that we don't use sc->le_mem.
 	 */
-	sc->sc_addr = 0;
-	sc->sc_memsize = rman_get_size(lesc->sc_bres);
-	sc->sc_flags = 0;
+	sc->le_addr = 0;
+	sc->le_memsize = rman_get_size(lesc->sc_bres);
+	sc->le_flags = 0;
 
 	/* That old black magic... */
 	if (OF_getprop(ofw_bus_get_node(dev), "busmaster-regval",
-	    &sc->sc_conf3, sizeof(sc->sc_conf3)) == -1)
-		sc->sc_conf3 = LE_C3_ACON | LE_C3_BCON;
+	    &sc->le_conf3, sizeof(sc->le_conf3)) == -1)
+		sc->le_conf3 = LE_C3_ACON | LE_C3_BCON;
 	/*
 	 * Make sure LE_C3_BSWP is cleared so that for cards where
 	 * that flag actually works le_lebuffer_copy{from,to}buf()
 	 * don't fail...
 	 */
-	sc->sc_conf3 &= ~LE_C3_BSWP;
+	sc->le_conf3 &= ~LE_C3_BSWP;
 
-	OF_getetheraddr(dev, sc->sc_enaddr);
+	OF_getetheraddr(dev, sc->le_enaddr);
 
-	sc->sc_copytodesc = le_lebuffer_copytodesc;
-	sc->sc_copyfromdesc = le_lebuffer_copyfromdesc;
-	sc->sc_copytobuf = le_lebuffer_copytobuf;
-	sc->sc_copyfrombuf = le_lebuffer_copyfrombuf;
-	sc->sc_zerobuf = le_lebuffer_zerobuf;
+	sc->le_copytodesc = le_lebuffer_copytodesc;
+	sc->le_copyfromdesc = le_lebuffer_copyfromdesc;
+	sc->le_copytobuf = le_lebuffer_copytobuf;
+	sc->le_copyfrombuf = le_lebuffer_copyfrombuf;
+	sc->le_zerobuf = le_lebuffer_zerobuf;
 
-	sc->sc_rdcsr = le_lebuffer_rdcsr;
-	sc->sc_wrcsr = le_lebuffer_wrcsr;
-	sc->sc_hwreset = NULL;
-	sc->sc_hwinit = NULL;
-	sc->sc_hwintr = NULL;
-	sc->sc_nocarrier = NULL;
-	sc->sc_mediachange = NULL;
-	sc->sc_mediastatus = NULL;
-	sc->sc_supmedia = le_lebuffer_media;
-	sc->sc_nsupmedia = NLEMEDIA;
-	sc->sc_defaultmedia = le_lebuffer_media[0];
+	sc->le_rdcsr = le_lebuffer_rdcsr;
+	sc->le_wrcsr = le_lebuffer_wrcsr;
+	sc->le_hwreset = NULL;
+	sc->le_hwinit = NULL;
+	sc->le_hwintr = NULL;
+	sc->le_nocarrier = NULL;
+	sc->le_mediachange = NULL;
+	sc->le_mediastatus = NULL;
+	sc->le_supmedia = le_lebuffer_media;
+	sc->le_nsupmedia = NLEMEDIA;
+	sc->le_defaultmedia = le_lebuffer_media[0];
 
 	error = am7990_config(&lesc->sc_am7990, device_get_name(dev),
 	    device_get_unit(dev));

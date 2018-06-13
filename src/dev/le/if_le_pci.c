@@ -73,6 +73,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/le/if_le_pci.c 263289 2014-03-18 01:40:2
 #include <sys/endian.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
+#include <sys/mbuf.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
 #include <sys/resource.h>
@@ -201,7 +202,7 @@ le_pci_rdcsr(struct lance_softc *sc, uint16_t port)
 static int
 le_pci_mediachange(struct lance_softc *sc)
 {
-	struct ifmedia *ifm = &sc->sc_media;
+	struct ifmedia *ifm = &sc->le_media;
 	uint16_t reg;
 
 	if (IFM_TYPE(ifm->ifm_media) != IFM_ETHER)
@@ -268,7 +269,7 @@ le_pci_dma_callback(void *xsc, bus_dma_segment_t *segs, int nsegs, int error)
 	if (error != 0)
 		return;
 	KASSERT(nsegs == 1, ("%s: bad DMA segment count", __func__));
-	sc->sc_addr = segs[0].ds_addr;
+	sc->le_addr = segs[0].ds_addr;
 }
 
 static int
@@ -340,7 +341,7 @@ le_pci_attach(device_t dev)
 		goto fail_ires;
 	}
 
-	sc->sc_memsize = PCNET_MEMSIZE;
+	sc->le_memsize = PCNET_MEMSIZE;
 	/*
 	 * For Am79C970A, Am79C971 and Am79C978 the init block must be 2-byte
 	 * aligned and the ring descriptors must be 16-byte aligned when using
@@ -352,9 +353,9 @@ le_pci_attach(device_t dev)
 	    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 	    BUS_SPACE_MAXADDR,		/* highaddr */
 	    NULL, NULL,			/* filter, filterarg */
-	    sc->sc_memsize,		/* maxsize */
+	    sc->le_memsize,		/* maxsize */
 	    1,				/* nsegments */
-	    sc->sc_memsize,		/* maxsegsize */
+	    sc->le_memsize,		/* maxsegsize */
 	    0,				/* flags */
 	    NULL, NULL,			/* lockfunc, lockarg */
 	    &lesc->sc_dmat);
@@ -363,57 +364,57 @@ le_pci_attach(device_t dev)
 		goto fail_pdtag;
 	}
 
-	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->sc_mem,
+	error = bus_dmamem_alloc(lesc->sc_dmat, (void **)&sc->le_mem,
 	    BUS_DMA_WAITOK | BUS_DMA_COHERENT, &lesc->sc_dmam);
 	if (error != 0) {
 		device_printf(dev, "cannot allocate DMA buffer memory\n");
 		goto fail_dtag;
 	}
 
-	sc->sc_addr = 0;
-	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->sc_mem,
-	    sc->sc_memsize, le_pci_dma_callback, sc, 0);
-	if (error != 0 || sc->sc_addr == 0) {
+	sc->le_addr = 0;
+	error = bus_dmamap_load(lesc->sc_dmat, lesc->sc_dmam, sc->le_mem,
+	    sc->le_memsize, le_pci_dma_callback, sc, 0);
+	if (error != 0 || sc->le_addr == 0) {
 		device_printf(dev, "cannot load DMA buffer map\n");
 		goto fail_dmem;
 	}
 
-	sc->sc_flags = LE_BSWAP;
-	sc->sc_conf3 = 0;
+	sc->le_flags = LE_BSWAP;
+	sc->le_conf3 = 0;
 
-	sc->sc_mediastatus = NULL;
+	sc->le_mediastatus = NULL;
 	switch (pci_get_device(dev)) {
 	case AMD_PCNET_HOME:
-		sc->sc_mediachange = le_pci_mediachange;
-		sc->sc_supmedia = le_home_supmedia;
-		sc->sc_nsupmedia = sizeof(le_home_supmedia) / sizeof(int);
-		sc->sc_defaultmedia = le_home_supmedia[0];
+		sc->le_mediachange = le_pci_mediachange;
+		sc->le_supmedia = le_home_supmedia;
+		sc->le_nsupmedia = sizeof(le_home_supmedia) / sizeof(int);
+		sc->le_defaultmedia = le_home_supmedia[0];
 		break;
 	default:
-		sc->sc_mediachange = le_pci_mediachange;
-		sc->sc_supmedia = le_pci_supmedia;
-		sc->sc_nsupmedia = sizeof(le_pci_supmedia) / sizeof(int);
-		sc->sc_defaultmedia = le_pci_supmedia[0];
+		sc->le_mediachange = le_pci_mediachange;
+		sc->le_supmedia = le_pci_supmedia;
+		sc->le_nsupmedia = sizeof(le_pci_supmedia) / sizeof(int);
+		sc->le_defaultmedia = le_pci_supmedia[0];
 	}
 
 	/*
 	 * Extract the physical MAC address from the ROM.
 	 */
-	bus_read_region_1(lesc->sc_rres, 0, sc->sc_enaddr,
-	    sizeof(sc->sc_enaddr));
+	bus_read_region_1(lesc->sc_rres, 0, sc->le_enaddr,
+	    sizeof(sc->le_enaddr));
 
-	sc->sc_copytodesc = lance_copytobuf_contig;
-	sc->sc_copyfromdesc = lance_copyfrombuf_contig;
-	sc->sc_copytobuf = lance_copytobuf_contig;
-	sc->sc_copyfrombuf = lance_copyfrombuf_contig;
-	sc->sc_zerobuf = lance_zerobuf_contig;
+	sc->le_copytodesc = lance_copytobuf_contig;
+	sc->le_copyfromdesc = lance_copyfrombuf_contig;
+	sc->le_copytobuf = lance_copytobuf_contig;
+	sc->le_copyfrombuf = lance_copyfrombuf_contig;
+	sc->le_zerobuf = lance_zerobuf_contig;
 
-	sc->sc_rdcsr = le_pci_rdcsr;
-	sc->sc_wrcsr = le_pci_wrcsr;
-	sc->sc_hwreset = le_pci_hwreset;
-	sc->sc_hwinit = NULL;
-	sc->sc_hwintr = NULL;
-	sc->sc_nocarrier = NULL;
+	sc->le_rdcsr = le_pci_rdcsr;
+	sc->le_wrcsr = le_pci_wrcsr;
+	sc->le_hwreset = le_pci_hwreset;
+	sc->le_hwinit = NULL;
+	sc->le_hwintr = NULL;
+	sc->le_nocarrier = NULL;
 
 	error = am79900_config(&lesc->sc_am79900, device_get_name(dev),
 	    device_get_unit(dev));
@@ -436,7 +437,7 @@ le_pci_attach(device_t dev)
  fail_dmap:
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
  fail_dmem:
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
  fail_dtag:
 	bus_dma_tag_destroy(lesc->sc_dmat);
  fail_pdtag:
@@ -464,7 +465,7 @@ le_pci_detach(device_t dev)
 	bus_teardown_intr(dev, lesc->sc_ires, lesc->sc_ih);
 	am79900_detach(&lesc->sc_am79900);
 	bus_dmamap_unload(lesc->sc_dmat, lesc->sc_dmam);
-	bus_dmamem_free(lesc->sc_dmat, sc->sc_mem, lesc->sc_dmam);
+	bus_dmamem_free(lesc->sc_dmat, sc->le_mem, lesc->sc_dmam);
 	bus_dma_tag_destroy(lesc->sc_dmat);
 	bus_dma_tag_destroy(lesc->sc_pdmat);
 	bus_release_resource(dev, SYS_RES_IRQ,

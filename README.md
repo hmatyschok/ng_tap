@@ -24,11 +24,13 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
   
    * msk(4), 
   
-   * bge(4) 
+   * bge(4),
+   
+   * hme(4) 
  
   and 
   
-   * hme(4) 
+   * le(4) 
    
   devices are supported, but this may change.
  
@@ -40,7 +42,7 @@ Legal Notice:
  
   (a) FreeBSD is a trademark of the FreeBSD Foundation. 
 
-  (b) VIA Rhine is a trademark of VIA Technologies Inc.
+  (b) VIA Rhine is a trademark of VIA Technologies, Inc.
   
   (c) Realtek is a trademark of Realtek Semiconductor Corp.
   
@@ -48,7 +50,9 @@ Legal Notice:
  
   (e) NetXtreme and NetLink are trademarks of Broadcom Corp.
   
-  (f) Don't use this software on production systems!
+  (f) AMD is a trademark of Advanced Micro Devices, Inc.
+  
+  (g) Don't use this software on production systems!
   
 Additional information about contacting
 ---------------------------------------
