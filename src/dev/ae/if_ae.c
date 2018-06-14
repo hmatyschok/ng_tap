@@ -427,6 +427,9 @@ ae_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH
+	error = ng_ae_tap_attach(sc);
+#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
@@ -816,7 +819,10 @@ ae_detach(device_t dev)
 	sc = device_get_softc(dev);
 	KASSERT(sc != NULL, ("[ae: %d]: sc is NULL", __LINE__));
 	ifp = sc->ae_ifp;
-	if (device_is_attached(dev)) {
+	if (device_is_attached(dev)) {	
+#ifdef NETGRAPH
+		ng_ae_tap_detach(sc);
+#endif /* NETGRPH */		
 		AE_LOCK(sc);
 		sc->ae_flags |= AE_FLAG_DETACH;
 		ae_stop(sc);
@@ -1945,16 +1951,24 @@ ae_rxeof(ae_softc_t *sc, ae_rxd_t *rxd)
 	struct mbuf *m;
 	unsigned int size;
 	uint16_t flags;
-
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETGRAPH */
 	AE_LOCK_ASSERT(sc);
 
 	ifp = sc->ae_ifp;
 	flags = le16toh(rxd->ae_flags);
-
+#ifdef NETGRAPH
+	ether_crc_len = (sc->ae_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 #ifdef AE_DEBUG
 	if_printf(ifp, "Rx interrupt occuried.\n");
 #endif
+#ifdef NETGRAPH 
+	size = le16toh(rxd->ae_len) - ether_crc_len;
+#else
 	size = le16toh(rxd->ae_len) - ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */ 
 	if (size < (ETHER_MIN_LEN - ETHER_CRC_LEN - ETHER_VLAN_ENCAP_LEN)) {
 		if_printf(ifp, "Runt frame received.");
 		if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
@@ -1978,7 +1992,20 @@ ae_rxeof(ae_softc_t *sc, ae_rxd_t *rxd)
 	 * Pass it through.
 	 */
 	AE_UNLOCK(sc);
+/*
+ * Very evil stuff comes here.. 
+ */		
+#ifdef NETGRAPH
+	if (sc->ae_tap_hook != NULL) {
+		ng_ae_tap_input(sc->ae_tap_hook, &m);
+		if (m != NULL) {
+			(*ifp->if_input)(ifp, m);
+		}
+	} else
+		(*ifp->if_input)(ifp, m);	
+#else
 	(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 	AE_LOCK(sc);
 }
 
@@ -1988,20 +2015,28 @@ ae_rx_intr(ae_softc_t *sc)
 	ae_rxd_t *rxd;
 	struct ifnet *ifp;
 	uint16_t flags;
+#ifdef NETGRAPH
+	uint16_t msk;
+#endif /* NETGRAPH */		
 	int count;
 
 	KASSERT(sc != NULL, ("[ae, %d]: sc is NULL!", __LINE__));
 
 	AE_LOCK_ASSERT(sc);
 
-	ifp = sc->ae_ifp;
+#ifdef NETGRAPH
+	msk = (sc->ae_tap_hook != NULL) 
+		? AE_RXD_SUCCESS|AE_RXD_CRCERR : AE_RXD_SUCCESS; 
+#endif /* NETGRAPH */
 
+	ifp = sc->ae_ifp;
+	
 	/*
 	 * Syncronize DMA buffers.
 	 */
 	bus_dmamap_sync(sc->ae_dma_rxd_tag, sc->ae_dma_rxd_map,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
-
+	    
 	for (count = 0;; count++) {
 		rxd = (ae_rxd_t *)(sc->ae_rxd_base + sc->ae_rxd_cur);
 		flags = le16toh(rxd->ae_flags);
@@ -2016,9 +2051,17 @@ ae_rx_intr(ae_softc_t *sc)
 		 */
 		sc->ae_rxd_cur = (sc->ae_rxd_cur + 1) % AE_RXD_COUNT_DEFAULT;
 
-		if ((flags & AE_RXD_SUCCESS) != 0)
+#ifdef NETGRAPH
+		if ((flags & msk) != 0) {
+#else
+		if ((flags & AE_RXD_SUCCESS) != 0) {
+#endif /* ! NETGRAPH */
 			ae_rxeof(sc, rxd);
-		else
+#ifdef NETGRAPH			
+			if ((flags & AE_RXD_SUCCESS) == 0)
+				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+#endif /* NETGRAPH */
+		} else
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 	}
 
