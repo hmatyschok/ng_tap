@@ -1347,10 +1347,10 @@ vr_rxeof(struct vr_softc *sc)
 	struct ifnet		*ifp;
 	struct vr_desc		*cur_rx;
 	int			cons, prog, total_len, rx_npkts;
-	uint32_t		rxstat, rxctl;
 #ifdef NETGRAPH
 	int ether_crc_len;
 #endif /* NETGRAPH */
+	uint32_t		rxstat, rxctl;
 
 	VR_LOCK_ASSERT(sc);
 	ifp = sc->vr_ifp;
@@ -1414,16 +1414,14 @@ vr_rxeof(struct vr_softc *sc)
 #endif
 #ifdef NETGRPAH
 			if (sc->vr_tap_hook != NULL) {
-				if ((rxstat & VR_RXSTAT_CRCERR) 
-					!= VR_RXSTAT_CRCERR) {
-					vr_discard_rxbuf(rxd);
-					continue;	
-				}
 /*
  * The Ethernet frame shall not discarded, if CRC 
- * error condition halts and hook is connected, but
- * this event shall recorded.
- */ 				
+ * error condition halts and hook is connected.
+ */ 
+				if ((rxstat & VR_RXSTAT_CRCERR) == 0) {
+					vr_discard_rxbuf(rxd);
+					continue;	
+				}				
 			} else {
 				vr_discard_rxbuf(rxd);
 				continue;
