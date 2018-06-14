@@ -4351,19 +4351,20 @@ bge_rxeof(struct bge_softc *sc, uint16_t rx_prod, int holdlck)
 {
 	if_t ifp;
 	int rx_npkts = 0, stdcnt = 0, jumbocnt = 0;
-	uint16_t rx_cons;
 #ifdef NETGRAPH
 	int ether_crc_len;
 #endif /* NETGRAPH */
+	uint16_t rx_cons;
+	
+#ifdef NETGRAPH
+	ether_crc_len = (sc->bge_tap_hook != NULL) ? 0 : ETHER_CRC_LEN; 
+#endif /* NETGRAPH */	
+	
 	rx_cons = sc->bge_rx_saved_considx;
 
 	/* Nothing to do. */
 	if (rx_cons == rx_prod)
-		return (rx_npkts);
-
-#ifdef NETGRAPH
-	ether_crc_len = (sc->bge_tap_hook != NULL) ? 0 : ETHER_CRC_LEN; 
-#endif /* NETGRAPH */	
+		return (rx_npkts);	
 
 	ifp = sc->bge_ifp;
 
