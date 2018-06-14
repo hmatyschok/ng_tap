@@ -128,7 +128,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/hme/if_hme.c 271831 2014-09-18 21:07:05Z
 #include <dev/hme/if_hmevar.h>
 #ifdef NETGRAPH
 #include <dev/hme/ng_hme_tap.h>
-#include <netgraph/ng_tap.h>
 NG_TAP_MODULE(HME, hme, hme_softc, NG_HME_TAP_NODE_TYPE);
 #endif /* NETGRHAPH */
 

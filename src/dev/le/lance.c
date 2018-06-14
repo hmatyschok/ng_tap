@@ -118,7 +118,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/le/lance.c 315221 2017-03-14 02:06:03Z p
 #include <dev/le/lancevar.h>
 #ifdef NETGRAPH
 #include <dev/le/ng_le_tap.h>
-#include <netgraph/ng_tap.h>
 NG_TAP_MODULE(LE, le, lance_softc, NG_LE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 

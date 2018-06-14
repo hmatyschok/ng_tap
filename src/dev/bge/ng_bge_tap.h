@@ -27,6 +27,8 @@
 #ifndef _BGE_NG_BGE_TAP_H_
 #define _BGE_NG_BGE_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_bge_tap(4) */
 #define NG_BGE_TAP_NODE_TYPE 	"bge_tap"
 

@@ -154,7 +154,6 @@ MODULE_DEPEND(rl, miibus, 1, 1, 1);
 #include <dev/rl/if_rlreg.h>
 #ifdef NETGRAPH
 #include <dev/rl/ng_rl_tap.h>
-#include <netgraph/ng_tap.h>
 NG_TAP_MODULE(RL, rl, rl_softc, NG_RL_TAP_NODE_TYPE);
 #endif
 /*

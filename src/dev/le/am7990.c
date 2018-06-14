@@ -140,7 +140,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/le/am7990.c 315221 2017-03-14 02:06:03Z 
 #include <dev/le/am7990reg.h>
 #include <dev/le/am7990var.h>
 #ifdef NETGRAPH
-#include <netgraph/ng_tap.h>
+#include <dev/le/ng_le_tap.h>
 extern NG_TAP_INPUT_DECLARE_FN(le);
 #endif /* NETGRAPH */
 

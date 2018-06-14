@@ -27,6 +27,8 @@
 #ifndef _RE_NG_RE_TAP_H_
 #define _RE_NG_RE_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_re_tap(4) */
 #define NG_RE_TAP_NODE_TYPE 	"re_tap"
 

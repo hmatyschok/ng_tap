@@ -27,6 +27,8 @@
 #ifndef _LE_NG_LE_TAP_H_
 #define _LE_NG_LE_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_le_tap(4) */
 #define NG_LE_TAP_NODE_TYPE 	"le_tap"
 

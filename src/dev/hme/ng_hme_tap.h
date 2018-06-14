@@ -27,6 +27,8 @@
 #ifndef _HME_NG_HME_TAP_H_
 #define _HME_NG_HME_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_hme_tap(4) */
 #define NG_HME_TAP_NODE_TYPE 	"hme_tap"
 

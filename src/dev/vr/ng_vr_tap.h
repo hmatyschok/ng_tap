@@ -27,6 +27,8 @@
 #ifndef _VR_NG_VR_TAP_H_
 #define _VR_NG_VR_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_vr_tap(4) */
 #define NG_VR_TAP_NODE_TYPE 	"vr_tap"
 

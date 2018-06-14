@@ -146,7 +146,6 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bge/if_bge.c 301103 2016-06-01 05:15:11Z
 #include <dev/bge/if_bgereg.h>
 #ifdef NETGRAPH
 #include <dev/bge/ng_bge_tap.h>
-#include <netgraph/ng_tap.h>
 NG_TAP_MODULE(BGE, bge, bge_softc, NG_BGE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 

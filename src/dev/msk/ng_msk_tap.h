@@ -27,6 +27,8 @@
 #ifndef _MSK_NG_MSK_TAP_H_
 #define _MSK_NG_MSK_TAP_H_
 
+#include <netgraph/ng_tap.h>
+
 /* Node name for ng_msk_tap(4) */
 #define NG_MSK_TAP_NODE_TYPE 	"msk_tap"
 
