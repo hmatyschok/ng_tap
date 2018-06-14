@@ -3272,17 +3272,14 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
 			 */
 #ifdef NETGRAPH	
 			if (len > msk_max_framelen || len < ETHER_HDR_LEN) {
-				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				msk_discard_rxbuf(sc_if, cons);
-				break;
-			}
 #else
 			if (len > MSK_MAX_FRAMELEN || len < ETHER_HDR_LEN) {
+#endif /* ! NETGRAPH */	
 				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 				msk_discard_rxbuf(sc_if, cons);
 				break;
 			}
-#endif /* ! NETGRAPH */			
+		
 		} else if (len > sc_if->msk_framesize ||
 		    ((status & GMR_FS_ANY_ERR) != 0) ||
 		    ((status & GMR_FS_RX_OK) == 0) || (rxlen != len)) {
@@ -3971,12 +3968,12 @@ msk_init_locked(struct msk_if_softc *sc_if)
 
 	/* Disable FCS. */
 #ifdef NETGRAPH
-	if (sc_if->msk_tap_hook == NULL) {
-		GMAC_WRITE_2(sc, sc_if->msk_port, 
-			GM_RX_CTRL, GM_RXCR_CRC_DIS);
-	} else {
+	if (sc_if->msk_tap_hook != NULL) {
 		GMAC_WRITE_2(sc, sc_if->msk_port, 
 			GM_RX_CTRL, ~GM_RXCR_CRC_DIS);
+	} else {
+		GMAC_WRITE_2(sc, sc_if->msk_port, 
+			GM_RX_CTRL, GM_RXCR_CRC_DIS);
 	}
 #else	
 	GMAC_WRITE_2(sc, sc_if->msk_port, GM_RX_CTRL, GM_RXCR_CRC_DIS);
