@@ -1487,13 +1487,7 @@ bfe_rxeof(struct bfe_softc *sc)
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-		if (sc->bfe_tap_hook != NULL) {
-			ng_bfe_tap_input(sc->bfe_tap_hook, &m);
-			if (m != NULL) {
-				(*ifp->if_input)(ifp, m);
-			}
-		} else
-			(*ifp->if_input)(ifp, m);	
+		NG_TAP_INPUT(bfe, sc, ifp, m);
 #else
 		(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */

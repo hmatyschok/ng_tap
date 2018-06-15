@@ -385,5 +385,19 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 	NG_TAP_DETACH_DECLARE(device, ctx)							\
 	NG_TAP_INPUT_DECLARE(device)
 
+/*
+ * Handoff into netgraph(4) protocol domain(9).
+ */
+#define NG_TAP_INPUT(device, _sc, _ifp, _m) 	do {                  \
+	if ((_sc)->device##_tap_hook != NULL) {                       \
+		ng_##device##_tap_input((_sc)->device##_tap_hook, &(_m)); \
+		if (m != NULL) {                                      \
+			(*(_ifp)->if_input)(_ifp, _m);                 \
+		}                                                     \
+	} else                                                        \
+		(*(_ifp)->if_input)(_ifp, _m);                        \
+                                                                      \
+} while (0);
+
 #endif /* _KERNEL */
 #endif /* _NETGRAPH_NG_TAP_H_ */
