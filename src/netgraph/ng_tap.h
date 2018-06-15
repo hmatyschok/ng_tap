@@ -322,16 +322,19 @@ bad:                                                                  \
 void                                                           \
 ng_##device##_tap_detach(struct ctx *sc)                              \
 {                                                                     \
-	if (NG_NODE_PRIVATE(sc->device##_tap_node)) {                 \
-		ng_rmnode_self(sc->device##_tap_node);                \
-		NG_NODE_UNREF(sc->device##_tap_node);                 \
+	if (sc->device##_tap_node != NULL) {                          \
+		if (NG_NODE_PRIVATE(sc->device##_tap_node)) {     \
+			ng_rmnode_self(sc->device##_tap_node);            \
+			NG_NODE_UNREF(sc->device##_tap_node);             \
                                                                       \
-		if (ng_##device##_tap_type.refs == 1)                 \
-			ng_rmtype(&ng_##device##_tap_type);           \
-		else                                                  \
-			atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
+			if (ng_##device##_tap_type.refs == 1)         \
+				ng_rmtype(&ng_##device##_tap_type);   \
+			else                                          \
+				atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
                                                                       \
-		sc->device##_tap_node = NULL;                         \
+			sc->device##_tap_node = NULL;                 \
+		} else                                                \
+			sc->device##_tap_node = NULL;                 \
 	}                                                             \
 }
 
