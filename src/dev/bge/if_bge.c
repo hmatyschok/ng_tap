@@ -3964,16 +3964,16 @@ again:
 		    INTR_TYPE_NET | INTR_MPSAFE, NULL, bge_intr, sc,
 		    &sc->bge_intrhand);
 
-	if (error) {
-		ether_ifdetach(ifp);
-		device_printf(sc->bge_dev, "couldn't set up irq\n");
-	}
-	
 #ifdef NETGRAPH  
 	if (error == 0) 
 		error = ng_bge_tap_attach(sc);
 #endif /* NETGRAPH */
 
+	if (error) {
+		ether_ifdetach(ifp);
+		device_printf(sc->bge_dev, "couldn't set up irq\n");
+	}
+	
 fail:
 	if (error)
 		bge_detach(dev);
