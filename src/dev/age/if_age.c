@@ -691,7 +691,7 @@ age_attach(device_t dev)
 			break;
 	}
 #ifdef NETGRAPH
-	if (error = 0)
+	if (error == 0)
 		error = ng_age_tap_attach(sc);
 #endif /* NETHGRAPH */	
 	
