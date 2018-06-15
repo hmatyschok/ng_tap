@@ -421,7 +421,7 @@ ae_attach(device_t dev)
 		INTR_TYPE_NET | INTR_MPSAFE,
 	    ae_intr, NULL, sc, &sc->ae_intrhand);
 #ifdef NETGRAPH
-	if (error = 0)
+	if (error == 0)
 		error = ng_ae_tap_attach(sc);
 #endif /* NETHGRAPH */	    
 	    
