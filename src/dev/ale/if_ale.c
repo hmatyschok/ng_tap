@@ -713,6 +713,11 @@ ale_attach(device_t dev)
 		if (error != 0)
 			break;
 	}
+#ifdef NETGRAPH	
+	if (error == 0)
+		error = ng_ale_tap_attach(sc);
+#endif /* NETGRAPH */	
+	
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		taskqueue_free(sc->ale_tq);
@@ -720,10 +725,7 @@ ale_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH	
-	error = ng_ale_tap_attach(sc);
-#endif /* NETGRAPH */
-
+	
 fail:
 	if (error != 0)
 		ale_detach(dev);
