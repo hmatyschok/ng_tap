@@ -268,7 +268,12 @@ ng_##device##_tap_attach(struct ctx *sc)                              \
 	struct ifnet *ifp;                                            \
 	int error;                                                    \
                                                                       \
-	if (ng_##device##_tap_type.refs == 0) {                       \
+    if (sc == NULL) {                                             \
+		error = EINVAL;                                       \
+		goto out;                                             \
+	}                                                             \
+                                                                      \
+    if (ng_##device##_tap_type.refs == 0) {                       \
 		error = ng_newtype(&ng_##device##_tap_type);          \
 		if (error != 0) {                                     \
 			(void)printf("%s: ng_newtype() failed; "      \
@@ -322,7 +327,7 @@ bad:                                                                  \
 void                                                           \
 ng_##device##_tap_detach(struct ctx *sc)                              \
 {                                                                     \
-	if (sc->device##_tap_node != NULL) {                          \
+	if (sc != NULL && sc->device##_tap_node != NULL) {            \
 		if (NG_NODE_PRIVATE(sc->device##_tap_node)) {     \
 			ng_rmnode_self(sc->device##_tap_node);            \
 			NG_NODE_UNREF(sc->device##_tap_node);             \
