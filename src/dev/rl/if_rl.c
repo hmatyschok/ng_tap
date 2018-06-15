@@ -1223,9 +1223,8 @@ rl_rxeof(struct rl_softc *sc)
 		if (!(rxstat & RL_RXSTAT_RXOK) ||
 		    total_len < ETHER_MIN_LEN ||
 		    total_len > ETHER_MAX_LEN + ETHER_VLAN_ENCAP_LEN) {
-#ifdef NETGRAPH			
-			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				
+			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);	
+#ifdef NETGRAPH							
 			if (sc->rl_tap_hook != NULL) {
 				if ((rxstat & RL_RDESC_STAT_RXERRSUM) == 0) {
 					ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
@@ -1238,7 +1237,6 @@ rl_rxeof(struct rl_softc *sc)
 				return (rx_npkts);
 			}
 #else
-			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 			ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 			rl_init_locked(sc);
 			return (rx_npkts);
