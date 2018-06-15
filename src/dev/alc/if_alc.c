@@ -74,6 +74,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/alc/if_alc.c 314005 2017-02-21 02:19:19Z
 
 #include <dev/alc/if_alcreg.h>
 #include <dev/alc/if_alcvar.h>
+#ifdef NETGRAPH
+#include <dev/alc/ng_alc_tap.h>
+NG_TAP_MODULE(ALC, alc, alc_softc, NG_ALC_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
@@ -1641,6 +1645,11 @@ alc_attach(device_t dev)
 		if (error != 0)
 			break;
 	}
+#ifdef NETGRAPH 	
+	if (error == 0)
+		error = ng_alc_tap_attach(sc);
+#endif /* NETGRAPH */
+	
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		taskqueue_free(sc->alc_tq);
@@ -1648,7 +1657,7 @@ alc_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-
+	
 fail:
 	if (error != 0)
 		alc_detach(dev);
@@ -1667,6 +1676,9 @@ alc_detach(device_t dev)
 
 	ifp = sc->alc_ifp;
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_alc_tap_detach(sc);
+#endif /* NETGRAPH */		
 		ether_ifdetach(ifp);
 		ALC_LOCK(sc);
 		alc_stop(sc);
@@ -3627,12 +3639,26 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 	struct mbuf *mp, *m;
 	uint32_t rdinfo, status, vtag;
 	int count, nsegs, rx_cons;
-
+#ifdef NETGRAPH
+	uint32_t msk, ether_crc_len;
+#endif /* NETGRAPH */
 	ifp = sc->alc_ifp;
 	status = le32toh(rrd->status);
 	rdinfo = le32toh(rrd->rdinfo);
 	rx_cons = RRD_RD_IDX(rdinfo);
 	nsegs = RRD_RD_CNT(rdinfo);
+#ifdef NETGRAPH	
+	msk = (RRD_ERR_CRC 
+		| RRD_ERR_ALIGN 
+		| RRD_ERR_TRUNC 
+		| RRD_ERR_RUNT);
+		
+	if (sc->alc_tap_hook != NULL) {
+		msk &= ~RRD_ERR_CRC;
+		ether_crc_len = 0;
+	} else
+		ether_crc_len = ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 
 	sc->alc_cdata.alc_rxlen = RRD_BYTES(status);
 	if ((status & (RRD_ERR_SUM | RRD_ERR_LENGTH)) != 0) {
@@ -3649,9 +3675,14 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 		 *  errored frames.
 		 */
 		status |= RRD_TCP_UDPCSUM_NOK | RRD_IPCSUM_NOK;
+#ifdef NETGRAPH
+		if ((status & msk) != 0) {
+#else		
 		if ((status & (RRD_ERR_CRC | RRD_ERR_ALIGN |
-		    RRD_ERR_TRUNC | RRD_ERR_RUNT)) != 0)
+		    RRD_ERR_TRUNC | RRD_ERR_RUNT)) != 0) {
+#endif /* ! NETGRAPH */		    
 			return;
+		}
 	}
 
 	for (count = 0; count < nsegs; count++,
@@ -3694,22 +3725,42 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 			 * It seems that L1C/L2C controller has no way
 			 * to tell hardware to strip CRC bytes.
 			 */
+#ifdef NETGRAPH
+			m->m_pkthdr.len =
+			    sc->alc_cdata.alc_rxlen - ether_crc_len;
+#else			 
 			m->m_pkthdr.len =
 			    sc->alc_cdata.alc_rxlen - ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 			if (nsegs > 1) {
 				/* Set last mbuf size. */
 				mp->m_len = sc->alc_cdata.alc_rxlen -
 				    (nsegs - 1) * sc->alc_buf_size;
 				/* Remove the CRC bytes in chained mbufs. */
 				if (mp->m_len <= ETHER_CRC_LEN) {
+#ifdef NETGRAPH
+					if (sc->alc_tap_hook == NULL) {
+						sc->alc_cdata.alc_rxtail =
+							sc->alc_cdata.alc_rxprev_tail;
+						sc->alc_cdata.alc_rxtail->m_len -=
+							(ETHER_CRC_LEN - mp->m_len);
+						sc->alc_cdata.alc_rxtail->m_next = NULL;
+						m_freem(mp);
+					}
+#else					
 					sc->alc_cdata.alc_rxtail =
 					    sc->alc_cdata.alc_rxprev_tail;
 					sc->alc_cdata.alc_rxtail->m_len -=
 					    (ETHER_CRC_LEN - mp->m_len);
 					sc->alc_cdata.alc_rxtail->m_next = NULL;
 					m_freem(mp);
+#endif /* ! NETGRAPH */
 				} else {
+#ifdef NETGRAPH					
+					mp->m_len -= ether_crc_len;
+#else
 					mp->m_len -= ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */										
 				}
 			} else
 				m->m_len = m->m_pkthdr.len;
@@ -3731,7 +3782,11 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 			{
 			/* Pass it on. */
 			ALC_UNLOCK(sc);
+#ifdef NETGRAPH
+			NG_TAP_INPUT(alc, sc, ifp, m);
+#else			
 			(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 			ALC_LOCK(sc);
 			}
 		}

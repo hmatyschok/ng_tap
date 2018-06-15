@@ -30,6 +30,14 @@
 #ifndef	_IF_ALCVAR_H
 #define	_IF_ALCVAR_H
 
+#include "opt_netgraph.h"
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
+
 #define	ALC_TX_RING_CNT		256
 #define	ALC_TX_RING_ALIGN	sizeof(struct tx_desc)
 #define	ALC_RX_RING_CNT		256
@@ -253,6 +261,10 @@ struct alc_softc {
 	struct task		alc_int_task;
 	struct taskqueue	*alc_tq;
 	struct mtx		alc_mtx;
+#ifdef NETGRAPH
+	node_p 		alc_tap_node;
+	hook_p 		alc_tap_hook;
+#endif /* NETGRAPH */
 };
 
 /* Register access macros. */
