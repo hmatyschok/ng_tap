@@ -26,9 +26,42 @@
  *
  * $FreeBSD: releng/11.1/sys/dev/ale/if_alevar.h 263957 2014-03-31 01:54:59Z yongari $
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #ifndef	_IF_ALEVAR_H
 #define	_IF_ALEVAR_H
+
+#include "opt_netgraph.h"
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 #define	ALE_TX_RING_CNT		256	/* Should be multiple of 4. */
 #define	ALE_TX_RING_CNT_MIN	32
@@ -223,6 +256,10 @@ struct ale_softc {
 	struct task		ale_int_task;
 	struct taskqueue	*ale_tq;
 	struct mtx		ale_mtx;
+#ifdef NETGRAPH
+	node_p 		ale_tap_node;
+	hook_p 		ale_tap_hook;
+#endif /* NETGRAPH */	
 };
 
 /* Register access macros. */

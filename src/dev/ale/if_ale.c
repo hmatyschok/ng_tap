@@ -72,6 +72,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/ale/if_ale.c 298307 2016-04-19 23:37:24Z
 
 #include <dev/ale/if_alereg.h>
 #include <dev/ale/if_alevar.h>
+#ifdef NETGRAPH
+#include <dev/ale/ng_ale_tap.h>
+NG_TAP_MODULE(ALE, ale, ale_softc, NG_ALE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
@@ -692,6 +696,9 @@ ale_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH	
+	error = ng_ale_tap_attach(sc);
+#endif /* NETGRAPH */
 
 fail:
 	if (error != 0)
@@ -711,6 +718,9 @@ ale_detach(device_t dev)
 
 	ifp = sc->ale_ifp;
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH	
+		ng_ale_tap_detach(sc);
+#endif /* NETGRAPH */		
 		ether_ifdetach(ifp);
 		ALE_LOCK(sc);
 		ale_stop(sc);
@@ -2493,8 +2503,12 @@ ale_rxeof(struct ale_softc *sc, int count)
 		| ALE_RD_OFLOW 
 		| ALE_RD_TRUNC);
 	
-	if (s)
-
+	if (sc->ale_tap_hook != NULL) {
+		msk &= ~ALE_RD_CRC;
+		ether_crc_len = 0;
+	} else
+		ether_crc_len = ETHER_CRC_LEN;
+		
 #endif /* NETGRAPH */
 	for (prog = 0; prog < count; prog++) {
 		if (rx_page->cons >= prod)
@@ -2535,9 +2549,13 @@ ale_rxeof(struct ale_softc *sc, int count)
 			 *  o frame length and protocol specific length
 			 *     does not match.
 			 */
+#ifdef NETGRAPH
+			if ((status & msk) != 0) {
+#else			 
 			if ((status & (ALE_RD_CRC | ALE_RD_CODE |
 			    ALE_RD_DRIBBLE | ALE_RD_RUNT | ALE_RD_OFLOW |
 			    ALE_RD_TRUNC)) != 0) {
+#endif /* ! NETGRAPH */					
 				ale_rx_update_page(sc, &rx_page, length, &prod);
 				continue;
 			}
@@ -2551,8 +2569,13 @@ ale_rxeof(struct ale_softc *sc, int count)
 		 * think users would expect good Rx performance numbers
 		 * on these low-end consumer ethernet controller.
 		 */
+#ifdef NETGRAPH
+		m = m_devget((char *)(rs + 1), length - ether_crc_len,
+		    ETHER_ALIGN, ifp, NULL);
+#else		 
 		m = m_devget((char *)(rs + 1), length - ETHER_CRC_LEN,
 		    ETHER_ALIGN, ifp, NULL);
+#endif /* ! NETGRAPH */
 		if (m == NULL) {
 			if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
 			ale_rx_update_page(sc, &rx_page, length, &prod);
@@ -2570,7 +2593,14 @@ ale_rxeof(struct ale_softc *sc, int count)
 
 		/* Pass it to upper layer. */
 		ALE_UNLOCK(sc);
+/*
+ * Very evil stuff comes here..
+ */
+#ifdef NETGRAPH
+		NG_TAP_INPUT(ale, sc, ifp, m);
+#else		
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		ALE_LOCK(sc);
 
 		ale_rx_update_page(sc, &rx_page, length, &prod);
