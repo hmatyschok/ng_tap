@@ -23,9 +23,42 @@
  * SUCH DAMAGE.
  */
 /* $FreeBSD: releng/11.1/sys/dev/bfe/if_bfereg.h 181994 2008-08-22 06:46:55Z yongari $ */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #ifndef _BFE_H
 #define _BFE_H
+
+#include "opt_netgraph.h"
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 /* PCI registers */
 #define BFE_PCI_MEMLO           0x10
@@ -614,6 +647,10 @@ struct bfe_softc
     u_int8_t                bfe_core_unit;
     u_char                  bfe_enaddr[6];
     int                     bfe_if_flags;
+#ifdef NETGRAPH
+	node_p 				bfe_tap_node;
+	hook_p 				bfe_tap_hook;
+#endif /* NETGRAPH */    
 };
 
 struct bfe_type

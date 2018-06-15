@@ -1950,17 +1950,18 @@ ae_rxeof(ae_softc_t *sc, ae_rxd_t *rxd)
 	struct ifnet *ifp;
 	struct mbuf *m;
 	unsigned int size;
-	uint16_t flags;
 #ifdef NETGRAPH
 	int ether_crc_len;
-#endif /* NETGRAPH */
+#endif /* NETGRAPH */	
+	uint16_t flags;
+
 	AE_LOCK_ASSERT(sc);
 
 	ifp = sc->ae_ifp;
-	flags = le16toh(rxd->ae_flags);
 #ifdef NETGRAPH
 	ether_crc_len = (sc->ae_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
-#endif /* NETGRAPH */
+#endif /* NETGRAPH */	
+	flags = le16toh(rxd->ae_flags);
 #ifdef AE_DEBUG
 	if_printf(ifp, "Rx interrupt occuried.\n");
 #endif

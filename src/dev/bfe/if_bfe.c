@@ -23,7 +23,31 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMBFES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMBFE.
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/bfe/if_bfe.c 271829 2014-09-18 21:03:13Z glebius $");
@@ -59,6 +83,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bfe/if_bfe.c 271829 2014-09-18 21:03:13Z
 #include <machine/bus.h>
 
 #include <dev/bfe/if_bfereg.h>
+#ifdef NETGRAPH
+#include <dev/bfe/ng_bfe_tap.h>
+NG_TAP_MODULE(BFE, bfe, bfe_softc, NG_BFE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 MODULE_DEPEND(bfe, pci, 1, 1, 1);
 MODULE_DEPEND(bfe, ether, 1, 1, 1);
@@ -528,6 +556,10 @@ bfe_attach(device_t dev)
 		device_printf(dev, "couldn't set up irq\n");
 		goto fail;
 	}
+#ifdef NETGRAPH
+	error = ng_bfe_tap_attach(sc);
+#endif /* NETGRAPH */
+	
 fail:
 	if (error != 0)
 		bfe_detach(dev);
@@ -545,6 +577,9 @@ bfe_detach(device_t dev)
 	ifp = sc->bfe_ifp;
 
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH 		
+		ng_bfe_tap_detach(sc);
+#endif /* NETGRAPH */
 		BFE_LOCK(sc);
 		sc->bfe_flags |= BFE_FLAG_DETACH;
 		bfe_stop(sc);
@@ -1381,12 +1416,26 @@ bfe_rxeof(struct bfe_softc *sc)
 	struct bfe_rx_data *r;
 	int cons, prog;
 	u_int32_t status, current, len, flags;
-
+#ifdef NETGRAPH
+	u_int32_t ether_crc_len, msk;
+#endif /* NETGRAPH */	
+	
 	BFE_LOCK_ASSERT(sc);
+
+#ifdef NETGRAPH 
+	msk = BFE_RX_FLAG_ERRORS;
+	
+	if (sc->bfe_tap_hook != NULL) {
+		msk &= ~BFE_RX_FLAG_CRCERR;
+		ether_crc_len = 0;
+	} else 
+		ether_crc_len = ETHER_CRC_LEN;
+#endif /* NETGRAPH */
+
 	cons = sc->bfe_rx_cons;
 	status = CSR_READ_4(sc, BFE_DMARX_STAT);
 	current = (status & BFE_STAT_CDMASK) / sizeof(struct bfe_desc);
-
+	
 	ifp = sc->bfe_ifp;
 
 	bus_dmamap_sync(sc->bfe_rx_tag, sc->bfe_rx_map,
@@ -1412,10 +1461,18 @@ bfe_rxeof(struct bfe_softc *sc)
 		flags = le16toh(rxheader->flags);
 
 		/* Remove CRC bytes. */
+#ifdef NETGRAPH
+		len -= ether_crc_len;		
+#else		
 		len -= ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 
 		/* flag an error and try again */
+#ifdef NETGRAPH
+		if ((len > ETHER_MAX_LEN+32) || (flags & msk)) {
+#else		
 		if ((len > ETHER_MAX_LEN+32) || (flags & BFE_RX_FLAG_ERRORS)) {
+#endif /* ! NETGRAPH */
 			m_freem(m);
 			continue;
 		}
@@ -1426,7 +1483,20 @@ bfe_rxeof(struct bfe_softc *sc)
 
 		m->m_pkthdr.rcvif = ifp;
 		BFE_UNLOCK(sc);
+/*
+ * Very evil stuff comes here.. 
+ */		
+#ifdef NETGRAPH
+		if (sc->bfe_tap_hook != NULL) {
+			ng_bfe_tap_input(sc->bfe_tap_hook, &m);
+			if (m != NULL) {
+				(*ifp->if_input)(ifp, m);
+			}
+		} else
+			(*ifp->if_input)(ifp, m);	
+#else
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		BFE_LOCK(sc);
 	}
 
