@@ -1530,7 +1530,7 @@ bce_attach(device_t dev)
 
 #ifdef NETGRAPH
 	if (rc == 0)
-		error = ng_bce_tap_attach(sc);
+		rc = ng_bce_tap_attach(sc);
 #endif /* NETHGRAPH */
 
 	if (rc) {
