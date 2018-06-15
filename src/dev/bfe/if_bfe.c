@@ -552,14 +552,16 @@ bfe_attach(device_t dev)
 	error = bus_setup_intr(dev, sc->bfe_irq, INTR_TYPE_NET | INTR_MPSAFE,
 			NULL, bfe_intr, sc, &sc->bfe_intrhand);
 
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_bfe_tap_attach(sc);
+#endif /* NETGRAPH */
+
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		goto fail;
 	}
-#ifdef NETGRAPH
-	error = ng_bfe_tap_attach(sc);
-#endif /* NETGRAPH */
-	
+		
 fail:
 	if (error != 0)
 		bfe_detach(dev);
