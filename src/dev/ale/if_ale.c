@@ -98,7 +98,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/ale/if_ale.c 298307 2016-04-19 23:37:24Z
 #include <dev/ale/if_alevar.h>
 #ifdef NETGRAPH
 #include <dev/ale/ng_ale_tap.h>
-NG_TAP_MODULE(ALE, ale, ale_softc, NG_ALE_TAP_NODE_TYPE);
+NG_TAP_MODULE(ale, ale_softc, NG_ALE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */

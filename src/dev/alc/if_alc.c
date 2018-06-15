@@ -76,7 +76,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/alc/if_alc.c 314005 2017-02-21 02:19:19Z
 #include <dev/alc/if_alcvar.h>
 #ifdef NETGRAPH
 #include <dev/alc/ng_alc_tap.h>
-NG_TAP_MODULE(ALC, alc, alc_softc, NG_ALC_TAP_NODE_TYPE);
+NG_TAP_MODULE(alc, alc_softc, NG_ALC_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */

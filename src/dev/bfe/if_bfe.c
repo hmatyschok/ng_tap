@@ -85,7 +85,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bfe/if_bfe.c 271829 2014-09-18 21:03:13Z
 #include <dev/bfe/if_bfereg.h>
 #ifdef NETGRAPH
 #include <dev/bfe/ng_bfe_tap.h>
-NG_TAP_MODULE(BFE, bfe, bfe_softc, NG_BFE_TAP_NODE_TYPE);
+NG_TAP_MODULE(bfe, bfe_softc, NG_BFE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 MODULE_DEPEND(bfe, pci, 1, 1, 1);

@@ -127,7 +127,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bce/if_bce.c 315221 2017-03-14 02:06:03Z
 #include <dev/bce/if_bcefw.h>
 #ifdef NETGRAPH
 #include <dev/bce/ng_bce_tap.h>
-NG_TAP_MODULE(BCE, bce, bce_softc, NG_BCE_TAP_NODE_TYPE);
+NG_TAP_MODULE(bce, bce_softc, NG_BCE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /****************************************************************************/
@@ -1531,7 +1531,7 @@ bce_attach(device_t dev)
 #ifdef NETGRAPH
 	if (rc == 0)
 		rc = ng_bce_tap_attach(sc);
-#endif /* NETHGRAPH */
+#endif /* NETGRAPH */
 
 	if (rc) {
 		BCE_PRINTF("%s(%d): Failed to setup IRQ!\n",

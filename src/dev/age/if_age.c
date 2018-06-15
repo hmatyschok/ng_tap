@@ -98,7 +98,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/age/if_age.c 298646 2016-04-26 15:03:15Z
 #include <dev/age/if_agevar.h>
 #ifdef NETGRAPH
 #include <dev/age/ng_age_tap.h>
-NG_TAP_MODULE(AGE, age, age_softc, NG_AGE_TAP_NODE_TYPE);
+NG_TAP_MODULE(age, age_softc, NG_AGE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */

@@ -81,7 +81,7 @@ ng_##device##_tap_shutdown(node_p node)                               \
 /*
  * Inverse element for ng_xxx_tap_disconnect(9).
  */
-#define NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx)                      \
+#define NG_TAP_NEWHOOK_DECLARE(device, ctx)                      \
 static int                                                            \
 ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 {                                                                     \
@@ -94,9 +94,7 @@ ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 	if (sc->device##_tap_hook != NULL)                            \
 		return (EISCONN);                                     \
                                                                       \
-	pfx##_LOCK(sc);                                               \
 	sc->device##_tap_hook = hook;                                 \
-	pfx##_UNLOCK(sc);                                             \
                                                                   \
 	return (ifpromisc(ifp, 1));                                   \
 }
@@ -209,7 +207,7 @@ ng_##device##_tap_rcvmsg(node_p node, item_p item, hook_p lasthook)   \
 /*
  * Inverse element for ng_xxx_tap_connect(9).
  */
-#define NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx)                   \
+#define NG_TAP_DISCONNECT_DECLARE(device, ctx)                   \
 static int                                                            \
 ng_##device##_tap_disconnect(hook_p hook)                             \
 {                                                                 \
@@ -217,9 +215,7 @@ ng_##device##_tap_disconnect(hook_p hook)                             \
 	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
 	struct ifnet *ifp = sc->device##_ifp;                         \
                                                                       \
-	pfx##_LOCK(sc);                                               \
 	sc->device##_tap_hook = NULL;                                 \
-	pfx##_UNLOCK(sc);                                             \
                                                                       \
 	return (ifpromisc(ifp, 0));                                   \
 }
@@ -376,15 +372,15 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 /*
  * Put everything together.
  */
-#define NG_TAP_MODULE(pfx, device, ctx, str) 					\
+#define NG_TAP_MODULE(device, ctx, str) 					\
 	NG_TAP_CMDLIST_DECLARE(device) 								\
 	NG_TAP_CONSTRUCTOR_DECLARE(device) 							\
 	NG_TAP_SHUTDOWN_DECLARE(device)								\
-	NG_TAP_NEWHOOK_DECLARE(pfx, device, ctx) 					\
+	NG_TAP_NEWHOOK_DECLARE(device, ctx) 					\
 	NG_TAP_CONNECT_DECLARE(device)								\
 	NG_TAP_RCVDATA_DECLARE(device, ctx)							\
 	NG_TAP_RCVMSG_DECLARE(device, ctx) 							\
-	NG_TAP_DISCONNECT_DECLARE(pfx, device, ctx) 				\
+	NG_TAP_DISCONNECT_DECLARE(device, ctx) 				\
 	NG_TAP_TYPE_DECLARE(device, str) 							\
 	NG_TAP_ATTACH_DECLARE_FN(device, ctx)                       \
 	NG_TAP_DETACH_DECLARE_FN(device, ctx) 		                \

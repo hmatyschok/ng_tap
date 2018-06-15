@@ -100,7 +100,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/ae/if_ae.c 298435 2016-04-21 20:30:38Z p
 #include "if_aevar.h"
 #ifdef NETGRAPH
 #include <dev/ae/ng_ae_tap.h>
-NG_TAP_MODULE(AE, ae, ae_softc, NG_AE_TAP_NODE_TYPE);
+NG_TAP_MODULE(ae, ae_softc, NG_AE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /*
@@ -423,7 +423,7 @@ ae_attach(device_t dev)
 #ifdef NETGRAPH
 	if (error == 0)
 		error = ng_ae_tap_attach(sc);
-#endif /* NETHGRAPH */	    
+#endif /* NETGRAPH */	    
 	    
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");

@@ -182,7 +182,7 @@ MODULE_DEPEND(re, miibus, 1, 1, 1);
 #include <dev/rl/if_rlreg.h>
 #ifdef NETGRAPH
 #include <dev/re/ng_re_tap.h>
-NG_TAP_MODULE(RL, rl, rl_softc, NG_RE_TAP_NODE_TYPE);
+NG_TAP_MODULE(rl, rl_softc, NG_RE_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 /* Tunables. */

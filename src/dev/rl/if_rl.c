@@ -147,7 +147,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/rl/if_rl.c 298307 2016-04-19 23:37:24Z p
 #include <dev/rl/if_rlreg.h>
 #ifdef NETGRAPH
 #include <dev/rl/ng_rl_tap.h>
-NG_TAP_MODULE(RL, rl, rl_softc, NG_RL_TAP_NODE_TYPE);
+NG_TAP_MODULE(rl, rl_softc, NG_RL_TAP_NODE_TYPE);
 #endif
 
 MODULE_DEPEND(rl, pci, 1, 1, 1);
