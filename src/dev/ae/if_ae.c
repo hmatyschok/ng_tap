@@ -420,6 +420,11 @@ ae_attach(device_t dev)
 	error = bus_setup_intr(dev, sc->ae_irq[0], 
 		INTR_TYPE_NET | INTR_MPSAFE,
 	    ae_intr, NULL, sc, &sc->ae_intrhand);
+#ifdef NETGRAPH
+	if (error = 0)
+		error = ng_ae_tap_attach(sc);
+#endif /* NETHGRAPH */	    
+	    
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		taskqueue_free(sc->ae_tq);
@@ -427,9 +432,6 @@ ae_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH
-	error = ng_ae_tap_attach(sc);
-#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
