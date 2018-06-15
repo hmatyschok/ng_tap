@@ -24,6 +24,31 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
@@ -71,6 +96,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/age/if_age.c 298646 2016-04-26 15:03:15Z
 
 #include <dev/age/if_agereg.h>
 #include <dev/age/if_agevar.h>
+#ifdef NETGRAPH
+#include <dev/age/ng_age_tap.h>
+NG_TAP_MODULE(AGE, age, age_softc, NG_AGE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
@@ -668,6 +697,9 @@ age_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH
+	error = ng_age_tap_attach(sc);
+#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
@@ -687,6 +719,9 @@ age_detach(device_t dev)
 
 	ifp = sc->age_ifp;
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_age_tap_detach(sc);
+#endif /* NETHGRAPH */		
 		AGE_LOCK(sc);
 		sc->age_flags |= AGE_FLAG_DETACH;
 		age_stop(sc);
@@ -2314,6 +2349,10 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 	uint32_t status, index, vtag;
 	int count, nsegs;
 	int rx_cons;
+#ifdef NETGRAPH
+	uint32_t msk;
+	int ether_crc_len;
+#endif /* NETGRAPH */	
 
 	AGE_LOCK_ASSERT(sc);
 
@@ -2322,6 +2361,20 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 	index = le32toh(rxrd->index);
 	rx_cons = AGE_RX_CONS(index);
 	nsegs = AGE_RX_NSEGS(index);
+#ifdef NETGRAPH
+	msk = (AGE_RRD_CRC 
+		| AGE_RRD_CODE 
+		| AGE_RRD_DRIBBLE 
+		| AGE_RRD_RUNT
+		| AGE_RRD_OFLOW 
+		| AGE_RRD_TRUNC);
+	
+	if (sc->age_tap_hook != NULL) {
+		msk &= ~AGE_RRD_CRC;
+		ether_crc_len = 0;
+	} else
+		ether_crc_len = ETHER_CRC_LEN; 
+#endif /* NETGRAPH */
 
 	sc->age_cdata.age_rxlen = AGE_RX_BYTES(le32toh(rxrd->len));
 	if ((status & (AGE_RRD_ERROR | AGE_RRD_LENGTH_NOK)) != 0) {
@@ -2335,9 +2388,14 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 		 *     does not match.
 		 */
 		status |= AGE_RRD_IPCSUM_NOK | AGE_RRD_TCP_UDPCSUM_NOK;
+#ifdef NETGRAPH
+		if ((status & msk) != 0) {
+#else
 		if ((status & (AGE_RRD_CRC | AGE_RRD_CODE | AGE_RRD_DRIBBLE |
-		    AGE_RRD_RUNT | AGE_RRD_OFLOW | AGE_RRD_TRUNC)) != 0)
+		    AGE_RRD_RUNT | AGE_RRD_OFLOW | AGE_RRD_TRUNC)) != 0) {
+#endif /* ! NETGRAPH */
 			return;
+		}
 	}
 
 	for (count = 0; count < nsegs; count++,
@@ -2380,22 +2438,42 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 			 * It seems that L1 controller has no way
 			 * to tell hardware to strip CRC bytes.
 			 */
+#ifdef NETGRAPH
+			m->m_pkthdr.len = sc->age_cdata.age_rxlen -
+			    ether_crc_len;
+#else			 
 			m->m_pkthdr.len = sc->age_cdata.age_rxlen -
 			    ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 			if (nsegs > 1) {
 				/* Set last mbuf size. */
 				mp->m_len = sc->age_cdata.age_rxlen -
 				    ((nsegs - 1) * AGE_RX_BUF_SIZE);
 				/* Remove the CRC bytes in chained mbufs. */
 				if (mp->m_len <= ETHER_CRC_LEN) {
+#ifdef NETGRAPH
+					if (sc->age_tap_hook == NULL) {
+						sc->age_cdata.age_rxtail =
+							sc->age_cdata.age_rxprev_tail; 
+						sc->age_cdata.age_rxtail->m_len -=
+							(ETHER_CRC_LEN - mp->m_len);
+						sc->age_cdata.age_rxtail->m_next = NULL;
+						m_freem(mp);
+					}
+#else
 					sc->age_cdata.age_rxtail =
-					    sc->age_cdata.age_rxprev_tail;
+					    sc->age_cdata.age_rxprev_tail; 
 					sc->age_cdata.age_rxtail->m_len -=
 					    (ETHER_CRC_LEN - mp->m_len);
 					sc->age_cdata.age_rxtail->m_next = NULL;
 					m_freem(mp);
+#endif /* ! NETGRAPH */
 				} else {
+#ifdef NETGRAPH					
 					mp->m_len -= ETHER_CRC_LEN;
+#else
+					mp->m_len -= ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */		
 				}
 			} else
 				m->m_len = m->m_pkthdr.len;
@@ -2444,7 +2522,20 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 			{
 			/* Pass it on. */
 			AGE_UNLOCK(sc);
+/*
+ * Very evil stuff comes here.. 
+ */		
+#ifdef NETGRAPH
+			if (sc->age_tap_hook != NULL) {
+				ng_age_tap_input(sc->age_tap_hook, &m);
+				if (m != NULL) {
+					(*ifp->if_input)(ifp, m);
+				}
+			} else
+				(*ifp->if_input)(ifp, m);	
+#else
 			(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 			AGE_LOCK(sc);
 			}
 		}
@@ -2596,11 +2687,12 @@ age_init_locked(struct age_softc *sc)
 
 	/* Initialize descriptors. */
 	error = age_init_rx_ring(sc);
-        if (error != 0) {
-                device_printf(sc->age_dev, "no memory for Rx buffers.\n");
-                age_stop(sc);
+	if (error != 0) {
+		device_printf(sc->age_dev, 
+			"no memory for Rx buffers.\n");
+		age_stop(sc);
 		return;
-        }
+	}
 	age_init_rr_ring(sc);
 	age_init_tx_ring(sc);
 	age_init_cmb_block(sc);
@@ -2718,7 +2810,7 @@ age_init_locked(struct age_softc *sc)
 	 *  Should understand pause parameter relationships between FIFO
 	 *  size and number of Rx descriptors and Rx return descriptors.
 	 *
-	 *  Magic parameters came from Linux.
+	 *  Magic parameters came from the Linux kernel.
 	 */
 	switch (sc->age_chip_rev) {
 	case 0x8001:

@@ -28,11 +28,13 @@ ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
    
    * hme(4), 
    
-   * le(4)
+   * le(4),
+   
+   * ae(4)
    
   and 
   
-   * ae(4) 
+   * age(4) 
    
   devices are supported, but this may change.
  
