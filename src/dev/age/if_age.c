@@ -690,6 +690,11 @@ age_attach(device_t dev)
 		if (error != 0)
 			break;
 	}
+#ifdef NETGRAPH
+	if (error = 0)
+		error = ng_age_tap_attach(sc);
+#endif /* NETHGRAPH */	
+	
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		taskqueue_free(sc->age_tq);
@@ -697,9 +702,6 @@ age_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH
-	error = ng_age_tap_attach(sc);
-#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
