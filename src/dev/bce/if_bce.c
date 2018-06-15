@@ -1528,21 +1528,17 @@ bce_attach(device_t dev)
 	rc = bus_setup_intr(dev, sc->bce_res_irq, INTR_TYPE_NET | INTR_MPSAFE,
 		NULL, bce_intr, sc, &sc->bce_intrhand);
 
+#ifdef NETGRAPH
+	if (rc == 0)
+		error = ng_bce_tap_attach(sc);
+#endif /* NETHGRAPH */
+
 	if (rc) {
 		BCE_PRINTF("%s(%d): Failed to setup IRQ!\n",
 		    __FILE__, __LINE__);
 		bce_detach(dev);
 		goto bce_attach_exit;
 	}
-#ifdef NETGRAPH
-	rc = ng_bce_tap_attach(sc);
-	if (rc) {
-		BCE_PRINTF("%s(%d): Failed to setup ng_bce_tap(4)!\n",
-		    __FILE__, __LINE__);
-		bce_detach(dev);
-		goto bce_attach_exit;
-	} 
-#endif /* NETGRAPH */
 
 	/*
 	 * At this point we've acquired all the resources
