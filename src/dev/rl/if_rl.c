@@ -144,6 +144,12 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/rl/if_rl.c 298307 2016-04-19 23:37:24Z p
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
+#include <dev/rl/if_rlreg.h>
+#ifdef NETGRAPH
+#include <dev/rl/ng_rl_tap.h>
+NG_TAP_MODULE(RL, rl, rl_softc, NG_RL_TAP_NODE_TYPE);
+#endif
+
 MODULE_DEPEND(rl, pci, 1, 1, 1);
 MODULE_DEPEND(rl, ether, 1, 1, 1);
 MODULE_DEPEND(rl, miibus, 1, 1, 1);
@@ -151,11 +157,6 @@ MODULE_DEPEND(rl, miibus, 1, 1, 1);
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
 
-#include <dev/rl/if_rlreg.h>
-#ifdef NETGRAPH
-#include <dev/rl/ng_rl_tap.h>
-NG_TAP_MODULE(RL, rl, rl_softc, NG_RL_TAP_NODE_TYPE);
-#endif
 /*
  * Various supported device vendors/types and their names.
  */
@@ -1172,7 +1173,7 @@ rl_rxeof(struct rl_softc *sc)
 	uint16_t		limit;
 	uint16_t		max_bytes, rx_bytes = 0;
 #ifdef NETGRAPH
-	int 	ether_crc_len, rxerr;
+	int 	ether_crc_len;
 #endif /* NETGRAPH */
 
 	RL_LOCK_ASSERT(sc);
@@ -1222,15 +1223,16 @@ rl_rxeof(struct rl_softc *sc)
 		if (!(rxstat & RL_RXSTAT_RXOK) ||
 		    total_len < ETHER_MIN_LEN ||
 		    total_len > ETHER_MAX_LEN + ETHER_VLAN_ENCAP_LEN) {
-			
-#ifdef NETGRAPH
-			if (rxstat & RL_RDESC_STAT_RXERRSUM) {
-				rxerr = (sc->rl_tap_hook != NULL) ? 0 : 1;
-			} else
-				rxerr = 1;
-			
-			if (rxerr != 0) {
-				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+#ifdef NETGRAPH			
+			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+				
+			if (sc->rl_tap_hook != NULL) {
+				if ((rxstat & RL_RDESC_STAT_RXERRSUM) == 0) {
+					ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
+					rl_init_locked(sc);
+					return (rx_npkts);
+				}
+			} else {
 				ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 				rl_init_locked(sc);
 				return (rx_npkts);
@@ -1239,8 +1241,8 @@ rl_rxeof(struct rl_softc *sc)
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 			ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 			rl_init_locked(sc);
-#endif /* ! NETGRAPH */
 			return (rx_npkts);
+#endif /* ! NETGRAPH */
 		}
 
 		/* No errors; receive the packet. */
