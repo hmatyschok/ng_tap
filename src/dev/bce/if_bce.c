@@ -23,7 +23,32 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/bce/if_bce.c 315221 2017-03-14 02:06:03Z pfg $");
 
@@ -48,6 +73,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bce/if_bce.c 315221 2017-03-14 02:06:03Z
  */
 
 #include "opt_bce.h"
+#include "opt_netgraph.h"
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -99,6 +125,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/bce/if_bce.c 315221 2017-03-14 02:06:03Z
 
 #include <dev/bce/if_bcereg.h>
 #include <dev/bce/if_bcefw.h>
+#ifdef NETGRAPH
+#include <dev/bce/ng_bce_tap.h>
+NG_TAP_MODULE(BCE, bce, bce_softc, NG_BCE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /****************************************************************************/
 /* BCE Debug Options                                                        */
@@ -1504,6 +1534,15 @@ bce_attach(device_t dev)
 		bce_detach(dev);
 		goto bce_attach_exit;
 	}
+#ifdef NETGRAPH
+	rc = ng_bce_tap_attach(sc);
+	if (rc) {
+		BCE_PRINTF("%s(%d): Failed to setup ng_bce_tap(4)!\n",
+		    __FILE__, __LINE__);
+		bce_detach(dev);
+		goto bce_attach_exit;
+	} 
+#endif /* NETGRAPH */
 
 	/*
 	 * At this point we've acquired all the resources
@@ -1564,6 +1603,10 @@ bce_detach(device_t dev)
 	u32 msg;
 
 	DBENTER(BCE_VERBOSE_UNLOAD | BCE_VERBOSE_RESET);
+
+#ifdef NETGRAPH
+	ng_bce_tap_detach(sc);
+#endif /* NETGRAPH */
 
 	ifp = sc->bce_ifp;
 
@@ -6730,7 +6773,12 @@ bce_rx_intr(struct bce_softc *sc)
 			m0->m_pkthdr.len = m0->m_len = pkt_len;
 
 		/* Remove the trailing Ethernet FCS. */
+#ifdef NETGRAPH
+		if (sc->bce_tap_hook == NULL)
+			m_adj(m0, -ETHER_CRC_LEN);
+#else
 		m_adj(m0, -ETHER_CRC_LEN);
+#endif /* ! NETGRAPH */
 
 		/* Check that the resulting mbuf chain is valid. */
 		DBRUN(m_sanity(m0, FALSE));
@@ -6750,9 +6798,23 @@ bce_rx_intr(struct bce_softc *sc)
 
 			/* Log the error and release the mbuf. */
 			sc->l2fhdr_error_count++;
+#ifdef NETGRAPH
+			if (sc->bce_tap_hook != NULL) { 
+				if ((status & L2_FHDR_ERRORS_BAD_CRC) == 0) {
+					m_freem(m0);
+					m0 = NULL;
+					goto bce_rx_intr_next_rx;
+				}
+			} else {
+				m_freem(m0);
+				m0 = NULL;
+				goto bce_rx_intr_next_rx;	
+			}
+#else
 			m_freem(m0);
 			m0 = NULL;
 			goto bce_rx_intr_next_rx;
+#endif /* ! NETGRAPH */
 		}
 
 		/* Send the packet to the appropriate interface. */
@@ -6842,7 +6904,14 @@ bce_rx_intr_next_rx:
 			sc->pg_cons = sw_pg_cons;
 
 			BCE_UNLOCK(sc);
+/*
+ * Very evil stuff comes here.. 
+ */		
+#ifdef NETGRAPH
+			NG_TAP_INPUT(bce, sc, ifp, m0);
+#else			
 			(*ifp->if_input)(ifp, m0);
+#endif /* ! NETGRAPH */
 			BCE_LOCK(sc);
 
 			/* Recover our place. */
@@ -7687,7 +7756,7 @@ bce_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 
 	DBENTER(BCE_VERBOSE_MISC);
 
-	switch(command) {
+	switch (command) {
 
 	/* Set the interface MTU. */
 	case SIOCSIFMTU:
@@ -8078,8 +8147,14 @@ bce_set_rx_mode(struct bce_softc *sc)
 	ifp = sc->bce_ifp;
 
 	/* Initialize receive mode default settings. */
-	rx_mode   = sc->rx_mode & ~(BCE_EMAC_RX_MODE_PROMISCUOUS |
-	    BCE_EMAC_RX_MODE_KEEP_VLAN_TAG);
+#ifdef NETGRAPH
+	rx_mode = sc->rx_mode & ~(BCE_EMAC_RX_MODE_PROMISCUOUS
+		| BCE_EMAC_RX_MODE_NO_CRC_CHK
+		| BCE_EMAC_RX_MODE_KEEP_VLAN_TAG);
+#else
+	rx_mode = sc->rx_mode & ~(BCE_EMAC_RX_MODE_PROMISCUOUS 
+		| BCE_EMAC_RX_MODE_KEEP_VLAN_TAG);
+#endif /* ! NETGRAPH */
 	sort_mode = 1 | BCE_RPM_SORT_USER0_BC_EN;
 
 	/*
@@ -8099,6 +8174,12 @@ bce_set_rx_mode(struct bce_softc *sc)
 
 		/* Enable promiscuous mode. */
 		rx_mode |= BCE_EMAC_RX_MODE_PROMISCUOUS;
+		
+#ifdef NETGRAPH 		
+		if (sc->bce_tap_hook != NULL)
+			rx_mode |= BCE_EMAC_RX_MODE_NO_CRC_CHK;
+#endif /* NETGRAPH */			
+
 		sort_mode |= BCE_RPM_SORT_USER0_PROM_EN;
 	} else if (ifp->if_flags & IFF_ALLMULTI) {
 		DBPRINT(sc, BCE_INFO_MISC, "Enabling all multicast mode.\n");

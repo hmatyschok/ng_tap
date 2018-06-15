@@ -391,7 +391,7 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 #define NG_TAP_INPUT(device, _sc, _ifp, _m) 	do {                  \
 	if ((_sc)->device##_tap_hook != NULL) {                       \
 		ng_##device##_tap_input((_sc)->device##_tap_hook, &(_m)); \
-		if (m != NULL) {                                      \
+		if ((_m) != NULL) {                                      \
 			(*(_ifp)->if_input)(_ifp, _m);                 \
 		}                                                     \
 	} else                                                        \
