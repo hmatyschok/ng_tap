@@ -2292,12 +2292,9 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 		 * if total_len > 2^13-1, both _RXERRSUM and _GIANT will be
 		 * set, but if CRC is clear, it will still be a valid frame.
 		 */
-		if ((rxstat & RL_RDESC_STAT_RXERRSUM) != 0) {
-#ifdef NETGRAPH
-			rxerr = (sc->rl_tap_hook != NULL) ? 0 : 1;
-#else			
+		if ((rxstat & RL_RDESC_STAT_RXERRSUM) != 0) {	
 			rxerr = 1;
-#endif /* ! NETGRAPH */
+
 			if ((sc->rl_flags & RL_FLAG_JUMBOV2) == 0 &&
 			    total_len > 8191 &&
 			    (rxstat & RL_RDESC_STAT_ERRS) == RL_RDESC_STAT_GIANT)
@@ -2308,12 +2305,23 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 				 * If this is part of a multi-fragment packet,
 				 * discard all the pieces.
 				 */
+#ifdef NETGRAPH
+				if (sc->rl_tap_hook == NULL) {
+					if (sc->rl_head != NULL) {
+						m_freem(sc->rl_head);
+						sc->rl_head = sc->rl_tail = NULL;
+					}
+					re_discard_rxbuf(sc, i);
+					continue;
+				}	
+#else
 				if (sc->rl_head != NULL) {
 					m_freem(sc->rl_head);
 					sc->rl_head = sc->rl_tail = NULL;
 				}
 				re_discard_rxbuf(sc, i);
 				continue;
+#endif /* ! NETGRAPH */
 			}
 		}
 
@@ -2440,13 +2448,7 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-		if (sc->rl_tap_hook != NULL) {
-			ng_rl_tap_input(sc->rl_tap_hook, &m);
-			if (m != NULL) {
-				(*ifp->if_input)(ifp, m);
-			}
-		} else
-			(*ifp->if_input)(ifp, m);	
+		NG_TAP_INPUT(rl, sc, ifp, m);	
 #else
 		(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */		
