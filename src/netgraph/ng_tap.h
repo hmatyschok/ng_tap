@@ -405,7 +405,7 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
 	} else                                                        \
 		(*(_ifp)->if_input)(_ifp, _m);                        \
                                                                       \
-} while (0);
+} while (0)
 
 #endif /* _KERNEL */
 #endif /* _NETGRAPH_NG_TAP_H_ */
