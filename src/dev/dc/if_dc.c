@@ -157,6 +157,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/dc/if_dc.c 277565 2015-01-23 15:14:30Z k
 #define	DC_USEIOSPACE
 
 #include <dev/dc/if_dcreg.h>
+#ifdef NETGRAPH
+#include <dev/dc/ng_dc_tap.h>
+NG_TAP_MODULE(dc, dc_softc, NG_DC_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 #ifdef __sparc64__
 #include <dev/ofw/openfirm.h>
@@ -2522,7 +2526,10 @@ dc_attach(device_t dev)
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->dc_irq, INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, dc_intr, sc, &sc->dc_intrhand);
-
+#ifdef NETGRAPH
+	if (error == 0)
+		ng_dc_tap_attach(sc);
+#endif /* NETGRAPH */
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
@@ -2561,6 +2568,9 @@ dc_detach(device_t dev)
 
 	/* These should only be active if attach succeeded */
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH 
+		ng_dc_tap_detach(sc);
+#endif /* NETGRAPH */		
 		DC_LOCK(sc);
 		dc_stop(sc);
 		DC_UNLOCK(sc);
@@ -2882,12 +2892,19 @@ dc_rxeof(struct dc_softc *sc)
 	struct ifnet *ifp;
 	struct dc_desc *cur_rx;
 	int i, total_len, rx_npkts;
+#ifdef NETGRAPH
+	int ether_crc_len, rx_err;
+#endif /* NETGRAPH */
 	uint32_t rxstat;
 
 	DC_LOCK_ASSERT(sc);
 
 	ifp = sc->dc_ifp;
 	rx_npkts = 0;
+#ifdef NETGRAPH
+	ether_crc_len = (sc->dc_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+	rx_err = 0;
+#endif /* NETGRAPH */
 
 	bus_dmamap_sync(sc->dc_rx_ltag, sc->dc_rx_lmap, BUS_DMASYNC_POSTREAD |
 	    BUS_DMASYNC_POSTWRITE);
@@ -2938,6 +2955,23 @@ dc_rxeof(struct dc_softc *sc)
 				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 				if (rxstat & DC_RXSTAT_COLLSEEN)
 					if_inc_counter(ifp, IFCOUNTER_COLLISIONS, 1);
+#ifdef NETGRAPH
+				if (sc->dc_tap_hook != NULL) 
+					rx_err = (rxstat & DC_RXSTAT_CRCERR) ? 0: 1;
+				else
+					rx_err = 1;
+				
+				if (rx_err != 0) {
+					dc_discard_rxbuf(sc, i);
+					if (rxstat & DC_RXSTAT_CRCERR)
+						continue;
+					else {
+						ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
+						dc_init_locked(sc);
+						return (rx_npkts);
+					}	
+				}
+#else
 				dc_discard_rxbuf(sc, i);
 				if (rxstat & DC_RXSTAT_CRCERR)
 					continue;
@@ -2946,11 +2980,16 @@ dc_rxeof(struct dc_softc *sc)
 					dc_init_locked(sc);
 					return (rx_npkts);
 				}
+#endif /* NETGRAPH */				
 			}
 		}
 
 		/* No errors; receive the packet. */
+#ifdef NETGRAPH
+		total_len -= ether_crc_len;
+#else		
 		total_len -= ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 #ifdef __NO_STRICT_ALIGNMENT
 		/*
 		 * On architectures without alignment problems we try to
@@ -2985,7 +3024,14 @@ dc_rxeof(struct dc_softc *sc)
 
 		if_inc_counter(ifp, IFCOUNTER_IPACKETS, 1);
 		DC_UNLOCK(sc);
+/*
+ * Very evil stuff comes here..
+ */		
+#ifdef NETGRAPH
+		NG_TAP_INPUT(dc, sc, ifp, m);
+#else
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		DC_LOCK(sc);
 	}
 
