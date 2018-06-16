@@ -30,6 +30,6 @@
 #include <netgraph/ng_tap.h>
 
 /* Node name for ng_dc_tap(4) */
-#define NG_DC_TAP_NODE_TYPE 	"sc_tap"
+#define NG_DC_TAP_NODE_TYPE 	"dc_tap"
 
 #endif /* _DC_NG_DC_TAP_H_ */
