@@ -2356,9 +2356,14 @@ fxp_init_body(struct fxp_softc *sc, int setmedia)
 	sc->flags &= ~FXP_FLAG_UCODE;
 	CSR_WRITE_4(sc, FXP_CSR_PORT, FXP_PORT_SOFTWARE_RESET);
 	DELAY(50);
-
+#ifdef NETGRAPH
+	if (sc->fxp_tap_hook == NULL)
+		prm = (if_getflags(ifp) & IFF_PROMISC) ? 1 : 0;
+	else
+		prm = 1;
+#else
 	prm = (if_getflags(ifp) & IFF_PROMISC) ? 1 : 0;
-
+#endif /* NETGRAPH */
 	/*
 	 * Initialize base of CBL and RFA memory. Loading with zero
 	 * sets it up for regular linear addressing.
@@ -2461,7 +2466,7 @@ fxp_init_body(struct fxp_softc *sc, int setmedia)
 	cbp->stripping =	!prm;	/* truncate rx packet to byte count */
 	cbp->padding =		1;	/* (do) pad short tx packets */
 #ifdef NETGRAPH 
-	cbp->rcv_crc_xfer = (sc->fxp_tap_hook != NULL) ? prm : 0;
+	cbp->rcv_crc_xfer = (sc->fxp_tap_hook == NULL) ? 0 : 1;
 #else
 	cbp->rcv_crc_xfer =	0;	/* (don't) xfer CRC to host */
 #endif /* ! NETGRAPH */ 
