@@ -26,7 +26,32 @@
  * SUCH DAMAGE.
  *
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/fxp/if_fxp.c 298955 2016-05-03 03:41:25Z pfg $");
 
@@ -82,6 +107,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/fxp/if_fxp.c 298955 2016-05-03 03:41:25Z
 #include <dev/fxp/if_fxpreg.h>
 #include <dev/fxp/if_fxpvar.h>
 #include <dev/fxp/rcvbundl.h>
+#ifdef NETGRAPH
+#include <dev/fxp/ng_fxp_tap.h>
+NG_TAP_MODULE(fxp, fxp_softc, NG_FXP_TAP_NODE_TYPE)
+#endif /* NETGRAPH */
 
 MODULE_DEPEND(fxp, pci, 1, 1, 1);
 MODULE_DEPEND(fxp, ether, 1, 1, 1);
@@ -443,7 +472,7 @@ fxp_attach(device_t dev)
 	ifmedia_init(&sc->sc_media, 0, fxp_serial_ifmedia_upd,
 	    fxp_serial_ifmedia_sts);
 
-	ifp = sc->ifp = if_gethandle(IFT_ETHER);
+	ifp = sc->fxp_ifp = if_gethandle(IFT_ETHER);
 	if (ifp == (void *)NULL) {
 		device_printf(dev, "can not if_alloc()\n");
 		error = ENOSPC;
@@ -903,9 +932,13 @@ fxp_attach(device_t dev)
 	 */
 	error = bus_setup_intr(dev, sc->fxp_res[1], INTR_TYPE_NET | INTR_MPSAFE,
 			       NULL, fxp_intr, sc, &sc->ih);
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_fxp_tap_attach(sc);
+#endif /* NETGRAPH */			       
 	if (error) {
 		device_printf(dev, "could not setup irq\n");
-		ether_ifdetach(sc->ifp);
+		ether_ifdetach(sc->fxp_ifp);
 		goto fail;
 	}
 
@@ -993,8 +1026,8 @@ fxp_release(struct fxp_softc *sc)
 		bus_dma_tag_destroy(sc->cbl_tag);
 	if (sc->mcs_tag)
 		bus_dma_tag_destroy(sc->mcs_tag);
-	if (sc->ifp)
-		if_free(sc->ifp);
+	if (sc->fxp_ifp)
+		if_free(sc->fxp_ifp);
 
 	mtx_destroy(&sc->sc_mtx);
 }
@@ -1008,10 +1041,12 @@ fxp_detach(device_t dev)
 	struct fxp_softc *sc = device_get_softc(dev);
 
 #ifdef DEVICE_POLLING
-	if (if_getcapenable(sc->ifp) & IFCAP_POLLING)
-		ether_poll_deregister(sc->ifp);
+	if (if_getcapenable(sc->fxp_ifp) & IFCAP_POLLING)
+		ether_poll_deregister(sc->fxp_ifp);
 #endif
-
+#ifdef NETGRAPH
+	ng_fxp_tap_detach(sc);
+#endif /* NETGRAPH */
 	FXP_LOCK(sc);
 	/*
 	 * Stop DMA and drop transmit queue, but disable interrupts first.
@@ -1024,7 +1059,7 @@ fxp_detach(device_t dev)
 	/*
 	 * Close down routes etc.
 	 */
-	ether_ifdetach(sc->ifp);
+	ether_ifdetach(sc->fxp_ifp);
 
 	/*
 	 * Unhook interrupt before dropping lock. This is to prevent
@@ -1070,7 +1105,7 @@ fxp_suspend(device_t dev)
 
 	FXP_LOCK(sc);
 
-	ifp = sc->ifp;
+	ifp = sc->fxp_ifp;
 	if (pci_find_cap(sc->dev, PCIY_PMG, &pmc) == 0) {
 		pmstat = pci_read_config(sc->dev, pmc + PCIR_POWER_STATUS, 2);
 		pmstat &= ~(PCIM_PSTAT_PME | PCIM_PSTAT_PMEENABLE);
@@ -1100,7 +1135,7 @@ static int
 fxp_resume(device_t dev)
 {
 	struct fxp_softc *sc = device_get_softc(dev);
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	int pmc;
 	uint16_t pmstat;
 
@@ -1413,7 +1448,7 @@ fxp_encap(struct fxp_softc *sc, struct mbuf **m_head)
 	int error, i, nseg, tcp_payload;
 
 	FXP_LOCK_ASSERT(sc, MA_OWNED);
-	ifp = sc->ifp;
+	ifp = sc->fxp_ifp;
 
 	tcp_payload = 0;
 	tcp = NULL;
@@ -1715,7 +1750,7 @@ static void
 fxp_intr(void *xsc)
 {
 	struct fxp_softc *sc = xsc;
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	uint8_t statack;
 
 	FXP_LOCK(sc);
@@ -1758,7 +1793,7 @@ fxp_txeof(struct fxp_softc *sc)
 	if_t ifp;
 	struct fxp_tx *txp;
 
-	ifp = sc->ifp;
+	ifp = sc->fxp_ifp;
 	bus_dmamap_sync(sc->cbl_tag, sc->cbl_map,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	for (txp = sc->fxp_desc.tx_first; sc->tx_queued &&
@@ -1980,9 +2015,23 @@ fxp_intr_body(struct fxp_softc *sc, if_t ifp, uint8_t statack,
 			    sc->rfa_size) ||
 			    status & (FXP_RFA_STATUS_CRC |
 			    FXP_RFA_STATUS_ALIGN | FXP_RFA_STATUS_OVERRUN)) {
+#ifdef NETGRAPH
+				if (sc->fxp_tap_hook != NULL) {
+					if ((status & FXP_RFA_STATUS_CRC) == 0) {
+						m_freem(m);
+						fxp_add_rfabuf(sc, rxp);
+						continue;
+					}
+				} else {
+					m_freem(m);
+					fxp_add_rfabuf(sc, rxp);
+					continue;
+				}
+#else					
 				m_freem(m);
 				fxp_add_rfabuf(sc, rxp);
 				continue;
+#endif /* ! NETGRAPH */
 			}
 
 			m->m_pkthdr.len = m->m_len = total_len;
@@ -2006,7 +2055,14 @@ fxp_intr_body(struct fxp_softc *sc, if_t ifp, uint8_t statack,
 			 * calling if_input() on each one.
 			 */
 			FXP_UNLOCK(sc);
+/*
+ * Very evil stuff comes here..
+ */			
+#ifdef NETGRAPH
+			NG_TAP_INPUT(fxp, sc, ifp, m);
+#else 
 			if_input(ifp, m);
+#endif /* ! NETGRAPH */
 			FXP_LOCK(sc);
 			rx_npkts++;
 			if ((if_getdrvflags(ifp) & IFF_DRV_RUNNING) == 0)
@@ -2030,7 +2086,7 @@ fxp_intr_body(struct fxp_softc *sc, if_t ifp, uint8_t statack,
 static void
 fxp_update_stats(struct fxp_softc *sc)
 {
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	struct fxp_stats *sp = sc->fxp_stats;
 	struct fxp_hwstats *hsp;
 	uint32_t *status;
@@ -2120,7 +2176,7 @@ static void
 fxp_tick(void *xsc)
 {
 	struct fxp_softc *sc = xsc;
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 
 	FXP_LOCK_ASSERT(sc, MA_OWNED);
 
@@ -2185,7 +2241,7 @@ fxp_tick(void *xsc)
 static void
 fxp_stop(struct fxp_softc *sc)
 {
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	struct fxp_tx *txp;
 	int i;
 
@@ -2240,7 +2296,7 @@ fxp_stop(struct fxp_softc *sc)
 static void
 fxp_watchdog(struct fxp_softc *sc)
 {
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 
 	FXP_LOCK_ASSERT(sc, MA_OWNED);
 
@@ -2276,7 +2332,7 @@ fxp_init(void *xsc)
 static void
 fxp_init_body(struct fxp_softc *sc, int setmedia)
 {
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	struct mii_data *mii;
 	struct fxp_cb_config *cbp;
 	struct fxp_cb_ias *cb_ias;
@@ -2404,7 +2460,11 @@ fxp_init_body(struct fxp_softc *sc, int setmedia)
 
 	cbp->stripping =	!prm;	/* truncate rx packet to byte count */
 	cbp->padding =		1;	/* (do) pad short tx packets */
+#ifdef NETGRAPH 
+	cbp->rcv_crc_xfer = (sc->fxp_tap_hook != NULL) ? prm : 0;
+#else
 	cbp->rcv_crc_xfer =	0;	/* (don't) xfer CRC to host */
+#endif /* ! NETGRAPH */ 
 	cbp->long_rx_en =	sc->flags & FXP_FLAG_LONG_PKT_EN ? 1 : 0;
 	cbp->ia_wake_en =	0;	/* (don't) wake up on address match */
 	cbp->magic_pkt_dis =	sc->flags & FXP_FLAG_WOL ? 0 : 1;
@@ -2493,7 +2553,7 @@ fxp_init_body(struct fxp_softc *sc, int setmedia)
 	cb_ias->cb_status = 0;
 	cb_ias->cb_command = htole16(FXP_CB_COMMAND_IAS | FXP_CB_COMMAND_EL);
 	cb_ias->link_addr = 0xffffffff;
-	bcopy(if_getlladdr(sc->ifp), cb_ias->macaddr, ETHER_ADDR_LEN);
+	bcopy(if_getlladdr(sc->fxp_ifp), cb_ias->macaddr, ETHER_ADDR_LEN);
 
 	/*
 	 * Start the IAS (Individual Address Setup) command/DMA.
@@ -2809,7 +2869,7 @@ fxp_miibus_statchg(device_t dev)
 
 	sc = device_get_softc(dev);
 	mii = device_get_softc(sc->miibus);
-	ifp = sc->ifp;
+	ifp = sc->fxp_ifp;
 	if (mii == NULL || ifp == (void *)NULL ||
 	    (if_getdrvflags(ifp) & IFF_DRV_RUNNING) == 0 ||
 	    (mii->mii_media_status & (IFM_AVALID | IFM_ACTIVE)) !=
@@ -2982,7 +3042,7 @@ static int
 fxp_mc_addrs(struct fxp_softc *sc)
 {
 	struct fxp_cb_mcs *mcsp = sc->mcsp;
-	if_t ifp = sc->ifp;
+	if_t ifp = sc->fxp_ifp;
 	int nmcasts = 0;
 
 	if ((if_getflags(ifp) & IFF_ALLMULTI) == 0) {
