@@ -344,29 +344,44 @@ ng_##device##_tap_detach(struct ctx *sc)                              \
  * by newly allocated mbuf(9), append and forward the chain 
  * to the netgraph(4) protocol domain(9).
  */
-#define NG_TAP_INPUT_DECLARE(device) 							\
-void 													\
-ng_##device##_tap_input(hook_p hook, struct mbuf **mp) 			\
-{ 																\
-	struct mbuf *t, *m; 										\
-	int off, error; 						 					\
-																\
-	m = *mp; 													\
-	off = m->m_pkthdr.len - ETHER_CRC_LEN; 						\
-																\
-	if ((t = m_split(m, off, M_NOWAIT)) != NULL) { 				\
-		while (m->m_next != NULL) 								\
-			m = m->m_next; 										\
-																\
-		m->m_next = t; 											\
-/* 																\
- * Sets *mp = NULL. 											\
- */																\
-		NG_SEND_DATA_ONLY(error, hook, *mp); 					\
-	} else { 													\
-		m_freem(*mp); 											\
-		*mp = NULL; 											\
-	} 															\
+#define NG_TAP_INPUT_DECLARE(device) 							      \
+void 													              \
+ng_##device##_tap_input(hook_p hook, struct mbuf **mp)                \
+{                                                                     \
+	struct mbuf *t, *m, *m0;                                      \
+	int off, error;                                               \
+                                                                      \
+	if ((m0 = *mp) != NULL) {                                     \
+		off = m0->m_pkthdr.len - ETHER_CRC_LEN;               \
+                                                                      \
+		if ((m = m_split(m0, off, M_NOWAIT)) != NULL) {       \
+/*                                                                    \
+ * Ensures that FCS won't share same cluster mbuf(9), if any.         \
+ */                                                                   \
+ 			if (!M_WRITABLE(m)) {                         \
+				t = m_dup(m, M_NOWAIT);               \
+				m_freem(m);                           \
+			} else                                        \
+				t = m;                                \
+                                                                      \
+			if (t != NULL) {                              \
+				m = m0;                               \
+                                                                      \
+				while (m->m_next != NULL)             \
+					m = m->m_next;                \
+                                                                      \
+				m->m_next = t;                        \
+/*                                                                    \
+ * Sets m0 = NULL.                                                    \
+ */                                                                   \
+				NG_SEND_DATA_ONLY(error, hook, m0);   \
+			} else {                                      \
+				m_freem(m0);                          \
+				m0 = NULL;                            \
+			}                                             \
+		}                                                     \
+		*mp = m0;                                             \
+	}                                                             \
 }
 
 /*
