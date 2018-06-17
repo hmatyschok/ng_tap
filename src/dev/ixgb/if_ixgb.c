@@ -1100,10 +1100,15 @@ ixgb_disable_promisc(struct adapter * adapter)
 
 	reg_rctl = IXGB_READ_REG(&adapter->hw, RCTL);
 #ifdef NETGRAPH
-	reg_rctl &= (~IXGB_RCTL_SBP);
-#endif /* NETGRAPH */
+	if (adapter->ixgb_tap_hook == NULL) {
+		reg_rctl &= (~IXGB_RCTL_SBP);
+		reg_rctl &= (~IXGB_RCTL_UPE);
+		reg_rctl &= (~IXGB_RCTL_MPE);
+	}
+#else
 	reg_rctl &= (~IXGB_RCTL_UPE);
 	reg_rctl &= (~IXGB_RCTL_MPE);
+#endif /* ! NETGRAPH */
 	IXGB_WRITE_REG(&adapter->hw, RCTL, reg_rctl);
 
 	return;
