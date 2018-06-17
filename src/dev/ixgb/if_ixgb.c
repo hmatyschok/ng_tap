@@ -1090,7 +1090,6 @@ ixgb_set_promisc(struct adapter * adapter)
 		reg_rctl &= ~IXGB_RCTL_UPE;
 		IXGB_WRITE_REG(&adapter->hw, RCTL, reg_rctl);
 	}
-	return;
 }
 
 static void
@@ -1110,8 +1109,6 @@ ixgb_disable_promisc(struct adapter * adapter)
 	reg_rctl &= (~IXGB_RCTL_MPE);
 #endif /* ! NETGRAPH */
 	IXGB_WRITE_REG(&adapter->hw, RCTL, reg_rctl);
-
-	return;
 }
 
 
