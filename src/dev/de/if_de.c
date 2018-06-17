@@ -24,7 +24,31 @@
  *
  * Id: if_de.c,v 1.94 1997/07/03 16:55:07 thomas Exp
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 /*
  * DEC 21040 PCI Ethernet Controller
  *
@@ -115,6 +139,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/de/if_de.c 315221 2017-03-14 02:06:03Z p
 #define	TULIP_HZ	10
 
 #include <dev/de/if_devar.h>
+#ifdef NETGRAPH
+#include <dev/de/ng_de_tap.h>
+NG_TAP_MODULE(tulip, tulip_softc, NG_DE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 #define	SYNC_NONE	0
 #define	SYNC_RX		1
@@ -3327,9 +3355,15 @@ tulip_rx_intr(tulip_softc_t * const sc)
 #if defined(TULIP_DEBUG)
     int cnt = 0;
 #endif
+#ifdef NETGRAPH 
+	int ether_crc_len;	
+#endif /* NETGRAPH */
 
     TULIP_LOCK_ASSERT(sc);
     CTR0(KTR_TULIP, "tulip_rx_intr: start");
+#ifdef NETGRAPH 
+	ether_crc_len = (sc->tulip_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;	
+#endif /* NETGRAPH */
     for (;;) {
 	TULIP_PERFSTART(rxget)
 	tulip_descinfo_t *eop = ri->ri_nextin, *dip;
@@ -3428,7 +3462,11 @@ tulip_rx_intr(tulip_softc_t * const sc)
 	/*
 	 *  Now get the size of received packet (minus the CRC).
 	 */
+#ifdef NETGRAPH
+	total_len = ((DESC_STATUS(eop) >> 16) & 0x7FFF) - ether_crc_len;
+#else	 
 	total_len = ((DESC_STATUS(eop) >> 16) & 0x7FFF) - ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 	if ((sc->tulip_flags & TULIP_RXIGNORE) == 0
 	    && ((DESC_STATUS(eop) & TULIP_DSTS_ERRSUM) == 0)) {
 	    me->m_len = total_len - last_offset;
@@ -3463,6 +3501,16 @@ tulip_rx_intr(tulip_softc_t * const sc)
 #if defined(TULIP_VERBOSE)
 			error = "bad crc";
 #endif
+#ifdef NETGRAPH
+			if (sc->tulip_tap_hook != NULL) {
+				me->m_len = total_len - last_offset;
+				sc->tulip_flags |= TULIP_RXACT;
+				accept = 1;
+				CTR1(KTR_TULIP, "tulip_rx_intr: "
+					"bad crc; length %d",
+					total_len);
+			}
+#endif /* NETGRAPH */
 		    }
 		}
 #if defined(TULIP_VERBOSE)
@@ -3522,7 +3570,14 @@ tulip_rx_intr(tulip_softc_t * const sc)
 #endif
 	    TULIP_UNLOCK(sc);
 	    CTR1(KTR_TULIP, "tulip_rx_intr: passing %p to upper layer", m0);
+/*
+ * Very evil stuff comes here..
+ */
+#ifdef NETGRAPH
+		NG_TAP_INPUT(tulip, sc, ifp, m0);
+#else
 	    (*ifp->if_input)(ifp, m0);
+#endif /* ! NETGRAPH */
 	    TULIP_LOCK(sc);
 	} else if (ms == NULL)
 	    /*
@@ -4898,6 +4953,16 @@ tulip_pci_attach(device_t dev)
 	    }
 	}
     }
+#ifdef NETGRAPH  
+    if (ng_tulip_tap_attach(sc) != 0) {
+		device_printf(dev, "couldn't initialize ng_de_tap(4) node\n");
+		tulip_busdma_cleanup(sc);
+		ether_ifdetach(sc->tulip_ifp);
+		if_free(sc->tulip_ifp);
+		mtx_destroy(TULIP_MUTEX(sc));
+		return (ENXIO);
+	}
+#endif /* NETGRAPH */    
     return 0;
 }
 
