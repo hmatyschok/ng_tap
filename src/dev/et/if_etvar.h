@@ -34,9 +34,42 @@
  * $DragonFly: src/sys/dev/netif/et/if_etvar.h,v 1.4 2007/10/23 14:28:42 sephe Exp $
  * $FreeBSD: releng/11.1/sys/dev/et/if_etvar.h 228381 2011-12-09 23:37:55Z yongari $
  */
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #ifndef _IF_ETVAR_H
 #define _IF_ETVAR_H
+
+#include "opt_netgraph.h"
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 #define	ET_RING_ALIGN		4096
 #define	ET_STATUS_ALIGN		8
@@ -65,9 +98,9 @@
 #define	ET_JUMBO_MEM_SIZE	(ET_JSLOTS * ET_JLEN)
 
 #define	CSR_WRITE_4(sc, reg, val)	\
-	bus_write_4((sc)->sc_mem_res, (reg), (val))
+	bus_write_4((sc)->et_mem_res, (reg), (val))
 #define	CSR_READ_4(sc, reg)		\
-	bus_read_4((sc)->sc_mem_res, (reg))
+	bus_read_4((sc)->et_mem_res, (reg))
 
 #define	ET_ADDR_HI(addr)	((uint64_t) (addr) >> 32)
 #define	ET_ADDR_LO(addr)	((uint64_t) (addr) & 0xffffffff)
@@ -282,60 +315,65 @@ struct et_hw_stats {
 };
 
 struct et_softc {
-	struct ifnet		*ifp;
-	device_t		dev;
-	struct mtx		sc_mtx;
-	device_t		sc_miibus;
-	void			*sc_irq_handle;
-	struct resource		*sc_irq_res;
-	struct resource		*sc_mem_res;
+	struct ifnet		*et_ifp;
+	device_t		et_dev;
+	struct mtx		et_mtx;
+	device_t		et_miibus;
+	void			*et_irq_handle;
+	struct resource		*et_irq_res;
+	struct resource		*et_mem_res;
 
-	int			sc_if_flags;
-	uint32_t		sc_flags;	/* ET_FLAG_ */
-	int			sc_expcap;
+	int			et_if_flags;
+	uint32_t		et_flags;	/* ET_FLAG_ */
+	int			et_expcap;
 
-	int			sc_mem_rid;
+	int			et_mem_rid;
 
-	int			sc_irq_rid;
+	int			et_irq_rid;
 
-	struct callout		sc_tick;
+	struct callout		et_tick;
 
 	int			watchdog_timer;
 
-	bus_dma_tag_t		sc_dtag;
+	bus_dma_tag_t		et_dtag;
 
-	struct et_rxdesc_ring	sc_rx_ring[ET_RX_NRING];
-	struct et_rxstat_ring	sc_rxstat_ring;
-	struct et_rxstatus_data	sc_rx_status;
+	struct et_rxdesc_ring	et_rx_ring[ET_RX_NRING];
+	struct et_rxstat_ring	et_rxstat_ring;
+	struct et_rxstatus_data	et_rx_status;
 
-	struct et_txdesc_ring	sc_tx_ring;
-	struct et_txstatus_data	sc_tx_status;
+	struct et_txdesc_ring	et_tx_ring;
+	struct et_txstatus_data	et_tx_status;
 
-	bus_dma_tag_t		sc_mbuf_dtag;
-	bus_dma_tag_t		sc_rx_mini_tag;
-	bus_dmamap_t		sc_rx_mini_sparemap;
-	bus_dma_tag_t		sc_rx_tag;
-	bus_dmamap_t		sc_rx_sparemap;
-	bus_dma_tag_t		sc_tx_tag;
-	struct et_rxbuf_data	sc_rx_data[ET_RX_NRING];
-	struct et_txbuf_data	sc_tx_data;
+	bus_dma_tag_t		et_mbuf_dtag;
+	bus_dma_tag_t		et_rx_mini_tag;
+	bus_dmamap_t		et_rx_mini_sparemap;
+	bus_dma_tag_t		et_rx_tag;
+	bus_dmamap_t		et_rx_sparemap;
+	bus_dma_tag_t		et_tx_tag;
+	struct et_rxbuf_data	et_rx_data[ET_RX_NRING];
+	struct et_txbuf_data	et_tx_data;
 
-	struct et_hw_stats	sc_stats;
-	uint32_t		sc_tx;
-	uint32_t		sc_tx_intr;
+	struct et_hw_stats	et_stats;
+	uint32_t		et_tx;
+	uint32_t		et_tx_intr;
 
 	/*
 	 * Sysctl variables
 	 */
-	int			sc_rx_intr_npkts;
-	int			sc_rx_intr_delay;
-	int			sc_tx_intr_nsegs;
-	uint32_t		sc_timer;
+	int			et_rx_intr_npkts;
+	int			et_rx_intr_delay;
+	int			et_tx_intr_nsegs;
+	uint32_t		et_timer;
+	
+#ifdef NETGRAPH
+	node_p 		et_tap_node;
+	hook_p 		et_tap_hook;
+#endif /* NETGRAPH */	
 };
 
-#define	ET_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define	ET_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
-#define	ET_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
+#define	ET_LOCK(_sc)		mtx_lock(&(_sc)->et_mtx)
+#define	ET_UNLOCK(_sc)		mtx_unlock(&(_sc)->et_mtx)
+#define	ET_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->et_mtx, MA_OWNED)
 
 #define	ET_FLAG_PCIE		0x0001
 #define	ET_FLAG_MSI		0x0002

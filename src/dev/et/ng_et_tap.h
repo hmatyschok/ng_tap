@@ -24,12 +24,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _FXP_NG_FXP_TAP_H_
-#define _FXP_NG_FXP_TAP_H_
+#ifndef _ET_NG_ET_TAP_H_
+#define _ET_NG_ET_TAP_H_
 
 #include <netgraph/ng_tap.h>
 
-/* Node name for ng_fxp_tap(4) */
-#define NG_FXP_TAP_NODE_TYPE 	"fxp_tap"
+/* Node name for ng_et_tap(4) */
+#define NG_ET_TAP_NODE_TYPE 	"et_tap"
 
-#endif /* _FXP_NG_FXP_TAP_H_ */
+#endif /* _ET_NG_ET_TAP_H_ */
