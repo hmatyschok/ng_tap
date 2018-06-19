@@ -24,6 +24,33 @@
  * SUCH DAMAGE.
  *
  */
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#include "opt_netgraph.h"
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/ffec/if_ffec.c 300878 2016-05-27 22:14:39Z ian $");
@@ -77,6 +104,12 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/ffec/if_ffec.c 300878 2016-05-27 22:14:3
 #include <net/if_types.h>
 #include <net/if_var.h>
 #include <net/if_vlan_var.h>
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 #include <dev/ffec/if_ffecreg.h>
 #include <dev/ofw/ofw_bus.h>
@@ -177,6 +210,10 @@ struct ffec_softc {
 	uint32_t		ffec_tx_idx_head;
 	uint32_t		ffec_tx_idx_tail;
 	int			ffec_txcount;
+#ifdef NETGRAPH
+	node_p 		ffec_tap_node;
+	hook_p 		ffec_tap_hook;
+#endif /* NETGRAPH */
 };
 
 #define	FFEC_LOCK(sc)			mtx_lock(&(sc)->ffec_mtx)
@@ -186,6 +223,11 @@ struct ffec_softc {
 #define	FFEC_LOCK_DESTROY(sc)		mtx_destroy(&(sc)->ffec_mtx);
 #define	FFEC_ASSERT_LOCKED(sc)		mtx_assert(&(sc)->ffec_mtx, MA_OWNED);
 #define	FFEC_ASSERT_UNLOCKED(sc)	mtx_assert(&(sc)->ffec_mtx, MA_NOTOWNED);
+
+#ifdef NETGRAPH
+#include <dev/ffec/ng_ffec_tap.h>
+NG_TAP_MODULE(ffec, ffec_softc, NG_FFEC_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 static void ffec_init_locked(struct ffec_softc *sc);
 static void ffec_stop_locked(struct ffec_softc *sc);
@@ -779,6 +821,9 @@ ffec_rxfinish_onebuf(struct ffec_softc *sc, int len)
 {
 	struct mbuf *m, *newmbuf;
 	struct ffec_bufmap *bmap;
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETRAPH */	
 	uint8_t *dst, *src;
 	int error;
 
@@ -814,7 +859,12 @@ ffec_rxfinish_onebuf(struct ffec_softc *sc, int len)
 	FFEC_UNLOCK(sc);
 
 	bmap = &sc->ffec_rxbuf_map[sc->ffec_rx_idx];
+#ifdef NETGRAPH
+	ether_crc_len = (sc->ffec_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+	len -= ether_crc_len;
+#else	
 	len -= ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 	bus_dmamap_sync(sc->ffec_rxbuf_tag, bmap->ffec_map, BUS_DMASYNC_POSTREAD);
 	bus_dmamap_unload(sc->ffec_rxbuf_tag, bmap->ffec_map);
 	m = bmap->ffec_m;
@@ -827,8 +877,11 @@ ffec_rxfinish_onebuf(struct ffec_softc *sc, int len)
 	dst = src - ETHER_ALIGN;
 	bcopy(src, dst, len);
 	m->m_data = dst;
+#ifdef NETGRAPH
+	NG_TAP_INPUT(ffec, sc, sc->ffec_ifp, m);
+#else	
 	sc->ffec_ifp->if_input(sc->ffec_ifp, m);
-
+#endif /* ! NETGRAPH */
 	FFEC_LOCK(sc);
 
 	if ((error = ffec_setup_rxbuf(sc, sc->ffec_rx_idx, newmbuf)) != 0) {
@@ -1362,6 +1415,9 @@ ffec_detach(device_t dev)
 	sc = device_get_softc(dev);
 
 	if (sc->ffec_is_attached) {
+#ifdef NETGRAPH
+		ng_ffec_tap_detach(sc);
+#endif /* NETGRAPH */		
 		FFEC_LOCK(sc);
 		sc->ffec_is_detaching = true;
 		ffec_stop_locked(sc);
@@ -1708,8 +1764,11 @@ ffec_attach(device_t dev)
 	/* All ready to run, attach the ethernet interface. */
 	ether_ifattach(ifp, eaddr);
 	sc->ffec_is_attached = true;
-
+#ifdef NETGRAPH
+	error = ng_ffec_tap_attach(sc);
+#else
 	error = 0;
+#endif /* ! NETGRAPH */
 out:
 
 	if (error != 0)
