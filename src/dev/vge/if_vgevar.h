@@ -31,6 +31,39 @@
  *
  * $FreeBSD: releng/11.1/sys/dev/vge/if_vgevar.h 200759 2009-12-20 19:45:46Z yongari $
  */
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+#include "opt_netgraph.h"
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 #define VGE_JUMBO_MTU	9000
 
@@ -99,7 +132,7 @@ struct vge_rxdesc {
 	struct vge_rxdesc	*rxd_prev;
 };
 
-struct vge_chain_data{
+struct vge_chain_data {
 	bus_dma_tag_t		vge_ring_tag;
 	bus_dma_tag_t		vge_buffer_tag;
 	bus_dma_tag_t		vge_tx_tag;
@@ -203,6 +236,10 @@ struct vge_softc {
 	struct vge_chain_data	vge_cdata;
 	struct vge_ring_data	vge_rdata;
 	struct vge_hw_stats	vge_stats;
+#ifdef NETGRAPH
+	node_p 		vge_tap_node;
+	hook_p 		vge_tap_hook;
+#endif /* NETGRAPH */	
 };
 
 #define	VGE_LOCK(_sc)		mtx_lock(&(_sc)->vge_mtx)

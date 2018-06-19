@@ -313,11 +313,11 @@ bad:                                                                  \
 }
 
 /* 
- * Detach from the netgraph(4) domain(9).
+ * Detach from the netgraph(4) protocol domain(9).
  * 
- * It is called once for each physical card during device_detach(9) 
- * or during device_attach(9) as exeception handling, if something 
- * went wrong. This is effectively ng_device_tap_destructor(9).
+ * It is called once for each physical card during xxx_detach(9) 
+ * or during xxx_attach(9) as exeception handling, if something 
+ * went wrong. This is effectively ng_xxx_tap_destructor(9).
  */
 #define NG_TAP_DETACH_DECLARE(device, ctx)                            \
 void                                                           \

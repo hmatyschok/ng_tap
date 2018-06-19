@@ -29,7 +29,31 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/vge/if_vge.c 271815 2014-09-18 20:30:47Z glebius $");
 
@@ -126,6 +150,10 @@ MODULE_DEPEND(vge, miibus, 1, 1, 1);
 
 #include <dev/vge/if_vgereg.h>
 #include <dev/vge/if_vgevar.h>
+#ifdef NETGRAPH
+#include <dev/vge/ng_vge_tap.h>
+NG_TAP_MODULE(vge, vge_softc, NG_VGE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 #define VGE_CSUM_FEATURES    (CSUM_IP | CSUM_TCP | CSUM_UDP)
 
@@ -548,8 +576,16 @@ vge_rxfilter(struct vge_softc *sc)
 	hashes[1] = 0;
 
 	rxcfg = CSR_READ_1(sc, VGE_RXCTL);
-	rxcfg &= ~(VGE_RXCTL_RX_MCAST | VGE_RXCTL_RX_BCAST |
-	    VGE_RXCTL_RX_PROMISC);
+#ifdef NETGRAPH
+/* 
+ * TODO: chk this condition on code-base from other device-driver..
+ */  
+	if (sc->vge_tap_hook == NULL) 
+		rxcfg &= ~VGE_RXCTL_RX_BADFRAMES;
+#endif /* NETGRAPH */
+	rxcfg &= ~(VGE_RXCTL_RX_MCAST 
+		| VGE_RXCTL_RX_BCAST 
+		| VGE_RXCTL_RX_PROMISC);
 	/*
 	 * Always allow VLAN oversized frames and frames for
 	 * this host.
@@ -560,8 +596,13 @@ vge_rxfilter(struct vge_softc *sc)
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		rxcfg |= VGE_RXCTL_RX_BCAST;
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-		if ((ifp->if_flags & IFF_PROMISC) != 0)
+		if ((ifp->if_flags & IFF_PROMISC) != 0) {
 			rxcfg |= VGE_RXCTL_RX_PROMISC;
+#ifdef NETGRAPH
+			if (sc->vge_tap_hook != NULL)
+				rxcfg |= VGE_RXCTL_RX_BADFRAMES;
+#endif /* NETGRAPH */
+		}	
 		if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
 			hashes[0] = 0xFFFFFFFF;
 			hashes[1] = 0xFFFFFFFF;
@@ -1135,7 +1176,10 @@ vge_attach(device_t dev)
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->vge_irq, INTR_TYPE_NET|INTR_MPSAFE,
 	    NULL, vge_intr, sc, &sc->vge_intrhand);
-
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_vge_tap_attach(sc);
+#endif /* NETGRAPH */
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
@@ -1173,6 +1217,9 @@ vge_detach(device_t dev)
 
 	/* These should only be active if attach succeeded */
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_vge_tap_detach(sc);
+#endif /* NETGRAPH */		
 		ether_ifdetach(ifp);
 		VGE_LOCK(sc);
 		vge_stop(sc);
@@ -1431,6 +1478,9 @@ vge_rxeof(struct vge_softc *sc, int count)
 {
 	struct mbuf *m;
 	struct ifnet *ifp;
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETGRAPH */	
 	int prod, prog, total_len;
 	struct vge_rxdesc *rxd;
 	struct vge_rx_desc *cur_rx;
@@ -1439,7 +1489,9 @@ vge_rxeof(struct vge_softc *sc, int count)
 	VGE_LOCK_ASSERT(sc);
 
 	ifp = sc->vge_ifp;
-
+#ifdef NETGRAPH
+	ether_crc_len = (sc->vge_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 	bus_dmamap_sync(sc->vge_cdata.vge_rx_ring_tag,
 	    sc->vge_cdata.vge_rx_ring_map,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
@@ -1503,9 +1555,23 @@ vge_rxeof(struct vge_softc *sc, int count)
 			 * If this is part of a multi-fragment packet,
 			 * discard all the pieces.
 			 */
+#ifdef NETGRAPH
+			if (sc->vge_tap_hook != NULL) {
+				if ((rxstat & VGE_RDSTS_CRCERR) == 0) {
+					VGE_CHAIN_RESET(sc);
+					vge_discard_rxbuf(sc, prod);
+					continue;
+				}
+			} else {
+				VGE_CHAIN_RESET(sc);
+				vge_discard_rxbuf(sc, prod);
+				continue;				
+			}
+#else			 
 			VGE_CHAIN_RESET(sc);
 			vge_discard_rxbuf(sc, prod);
 			continue;
+#endif /* ! NETGRAPH */
 		}
 
 		if (vge_newbuf(sc, prod) != 0) {
@@ -1525,21 +1591,42 @@ vge_rxeof(struct vge_softc *sc, int count)
 			 * care about anyway.
 			 */
 			if (m->m_len <= ETHER_CRC_LEN) {
+#ifdef NETGRAPH
+				if (sc->vge_tap_hook == NULL) {
+					sc->vge_cdata.vge_tail->m_len -=
+						(ETHER_CRC_LEN - m->m_len);
+					m_freem(m);
+				}	
+#else				
 				sc->vge_cdata.vge_tail->m_len -=
 				    (ETHER_CRC_LEN - m->m_len);
 				m_freem(m);
+#endif /* ! NETGRAPH */
 			} else {
+#ifdef NETGRAPH				
+				m->m_len -= ether_crc_len;
+#else
 				m->m_len -= ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 				m->m_flags &= ~M_PKTHDR;
 				sc->vge_cdata.vge_tail->m_next = m;
 			}
 			m = sc->vge_cdata.vge_head;
 			m->m_flags |= M_PKTHDR;
+#ifdef NETGRAPH			
+			m->m_pkthdr.len = total_len - ether_crc_len;
+#else
 			m->m_pkthdr.len = total_len - ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 		} else {
 			m->m_flags |= M_PKTHDR;
+#ifdef NETGRAPH
+			m->m_pkthdr.len = m->m_len =
+			    (total_len - ether_crc_len);
+#else
 			m->m_pkthdr.len = m->m_len =
 			    (total_len - ETHER_CRC_LEN);
+#endif /* ! NETGRAPH */
 		}
 
 #ifndef	__NO_STRICT_ALIGNMENT
@@ -1577,7 +1664,11 @@ vge_rxeof(struct vge_softc *sc, int count)
 		}
 
 		VGE_UNLOCK(sc);
+#ifdef NETGRAPH
+		NG_TAP_INPUT(vge, sc, ifp, m);
+#else	
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		VGE_LOCK(sc);
 		sc->vge_cdata.vge_head = NULL;
 		sc->vge_cdata.vge_tail = NULL;
