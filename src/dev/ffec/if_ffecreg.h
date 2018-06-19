@@ -280,10 +280,9 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/ffec/if_ffecreg.h 314516 2017-03-01 21:2
  * A hardware buffer descriptor.  Rx and Tx buffers have the same descriptor
  * layout, but the bits in the flags field have different meanings.
  */
-struct ffec_hwdesc
-{
-	uint32_t	flags_len;
-	uint32_t	buf_paddr;
+struct ffec_hwdesc {
+	uint32_t	ffec_flags_len;
+	uint32_t	ffec_buf_paddr;
 };
 
 #define	FEC_TXDESC_READY		(1U << 31)
