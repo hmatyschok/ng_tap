@@ -26,7 +26,32 @@
  *
  * Myson fast ethernet PCI NIC driver, available at: http://www.myson.com.tw/
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/my/if_my.c 276750 2015-01-06 12:59:37Z rwatson $");
 
@@ -80,6 +105,10 @@ static int      MY_USEIOSPACE = 1;
 
 
 #include <dev/my/if_myreg.h>
+#ifdef NETGRAPH
+#include <dev/my/ng_my_tap.h>
+NG_TAP_MODULE(my, my_softc, NG_MY_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /*
  * Various supported device vendors/types and their names.
@@ -959,7 +988,10 @@ my_attach(device_t dev)
 
 	error = bus_setup_intr(dev, sc->my_irq, INTR_TYPE_NET | INTR_MPSAFE,
 			       NULL, my_intr, sc, &sc->my_intrhand);
-
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_my_tap_attach(sc);
+#endif /* NETGRAPH */
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		goto detach_if;
@@ -989,6 +1021,9 @@ my_detach(device_t dev)
 	struct ifnet   *ifp;
 
 	sc = device_get_softc(dev);
+#ifdef NETGRAPH
+	ng_my_tap_detach(sc);
+#endif /* NETGRAPH */	
 	ifp = sc->my_ifp;
 	ether_ifdetach(ifp);
 	MY_LOCK(sc);
@@ -1110,10 +1145,16 @@ my_rxeof(struct my_softc * sc)
 	struct ifnet   *ifp;
 	struct my_chain_onefrag *cur_rx;
 	int             total_len = 0;
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETGRAPH */	
 	u_int32_t       rxstat;
 
 	MY_LOCK_ASSERT(sc);
 	ifp = sc->my_ifp;
+#ifdef NETGRAPH
+	ether_crc_len = (sc->my_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+#endif /* NETGRAPH */	
 	while (!((rxstat = sc->my_cdata.my_rx_head->my_ptr->my_status)
 	    & MY_OWNByNIC)) {
 		cur_rx = sc->my_cdata.my_rx_head;
@@ -1121,13 +1162,28 @@ my_rxeof(struct my_softc * sc)
 
 		if (rxstat & MY_ES) {	/* error summary: give up this rx pkt */
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+#ifdef NETGRAPH
+			if (sc->my_tap_hook != NULL) {
+				if ((rxstat & MY_CRC) == 0) {
+					cur_rx->my_ptr->my_status = MY_OWNByNIC;
+					continue;
+				}
+			} else {
+				cur_rx->my_ptr->my_status = MY_OWNByNIC;
+				continue;
+			}
+#else			
 			cur_rx->my_ptr->my_status = MY_OWNByNIC;
 			continue;
+#endif /* ! NETGRAPH */
 		}
 		/* No errors; receive the packet. */
 		total_len = (rxstat & MY_FLNGMASK) >> MY_FLNGShift;
+#ifdef NETGRAPH
+		total_len -= ether_crc_len;
+#else
 		total_len -= ETHER_CRC_LEN;
-
+#endif /* ! NETGRAPH */
 		if (total_len < MINCLSIZE) {
 			m = m_devget(mtod(cur_rx->my_mbuf, char *),
 			    total_len, 0, ifp, NULL);
@@ -1174,7 +1230,11 @@ my_rxeof(struct my_softc * sc)
 		}
 #endif
 		MY_UNLOCK(sc);
+#ifdef NETGRAPH
+		NG_TAP_INPUT(my, sc, ifp, m);
+#else		
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		MY_LOCK(sc);
 	}
 	return;
