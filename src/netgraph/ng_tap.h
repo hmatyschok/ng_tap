@@ -116,7 +116,7 @@ ng_##device##_tap_connect(hook_p hook)                                \
  * netgraph(4) peer node, reinject upstream and demultiplex by 
  * layer above or forward by e. g.  if_bridge(4).
  * 
- * We assumming that the ETHER_CRC_SUM was _not_ stripped off.
+ * We assumming that FCS was _not_ stripped off.
  */
 #define NG_TAP_RCVDATA_DECLARE(device, ctx)                           \
 static int                                                            \
@@ -250,9 +250,9 @@ void 	ng_##device##_tap_detach(struct ctx *);
 void 	ng_##device##_tap_input(hook_p, struct mbuf **);
 
 /* 
- * Attach instance of xxx(4) NIC with netgraph(4) node.
- * 
- * It is called once for each physical card during device_attach(9). 
+ * Attach instance of xxx(4) NIC with netgraph(4) 
+ * node. It is called once for each physical card 
+ * during xxx_attach(9). 
  * 
  * This is effectively ng_xxx_tap_constructor(9).
  */
