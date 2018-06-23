@@ -24,7 +24,32 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 /* Driver for DM&P Electronics, Inc, Vortex86 RDC R6040 FastEthernet. */
 
 #include <sys/cdefs.h>
@@ -69,6 +94,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/vte/if_vte.c 295735 2016-02-18 01:24:10Z
 
 #include <dev/vte/if_vtereg.h>
 #include <dev/vte/if_vtevar.h>
+#ifdef NETGRAPH
+#include <dev/vte/ng_vte_tap.h>
+NG_TAP_MODULE(vte, vte_softc, NG_VTE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 /* "device miibus" required.  See GENERIC if you get errors here. */
 #include "miibus_if.h"
@@ -486,6 +515,10 @@ vte_attach(device_t dev)
 
 	error = bus_setup_intr(dev, sc->vte_irq, INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, vte_intr, sc, &sc->vte_intrhand);
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_vte_tap_attach(sc);
+#endif /* NETGRAPH */	    
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		ether_ifdetach(ifp);
@@ -509,6 +542,9 @@ vte_detach(device_t dev)
 
 	ifp = sc->vte_ifp;
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_vte_tap_detach(sc);
+#endif /* NETGRAPH */		
 		VTE_LOCK(sc);
 		vte_stop(sc);
 		VTE_UNLOCK(sc);
@@ -1498,11 +1534,17 @@ vte_rxeof(struct vte_softc *sc)
 	struct vte_rxdesc *rxd;
 	struct mbuf *m;
 	uint16_t status, total_len;
+#ifdef NETGRAPH
+	int ether_crc_len;
+#endif /* NETGRAPH */	
 	int cons, prog;
 
 	bus_dmamap_sync(sc->vte_cdata.vte_rx_ring_tag,
 	    sc->vte_cdata.vte_rx_ring_map, BUS_DMASYNC_POSTREAD |
 	    BUS_DMASYNC_POSTWRITE);
+#ifdef NETGRAPH
+	ether_crc_len = (sc->vte_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
+#endif /* NETGRAPH */
 	cons = sc->vte_cdata.vte_rx_cons;
 	ifp = sc->vte_ifp;
 	for (prog = 0; (ifp->if_drv_flags & IFF_DRV_RUNNING) != 0; prog++,
@@ -1515,10 +1557,27 @@ vte_rxeof(struct vte_softc *sc)
 		m = rxd->rx_m;
 		if ((status & VTE_DRST_RX_OK) == 0) {
 			/* Discard errored frame. */
+#ifdef NETGRPAH
+			if (sc->vte_tap_hook != NULL) {
+				if ((status & VTE_DRST_CRC_ERR) == 0) {
+					rxd->rx_desc->drlen =
+						htole16(MCLBYTES - sizeof(uint32_t));
+					rxd->rx_desc->drst = htole16(VTE_DRST_RX_OWN);
+					continue;
+				}
+			} else {
+				rxd->rx_desc->drlen =
+					htole16(MCLBYTES - sizeof(uint32_t));
+				rxd->rx_desc->drst = htole16(VTE_DRST_RX_OWN);
+				continue;
+			}
+
+#else			
 			rxd->rx_desc->drlen =
 			    htole16(MCLBYTES - sizeof(uint32_t));
 			rxd->rx_desc->drst = htole16(VTE_DRST_RX_OWN);
 			continue;
+#endif /* ! NETGRAPH */
 		}
 		if (vte_newbuf(sc, rxd) != 0) {
 			if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
@@ -1531,13 +1590,21 @@ vte_rxeof(struct vte_softc *sc)
 		/*
 		 * It seems there is no way to strip FCS bytes.
 		 */
+#ifdef NETGRAPH
+		m->m_pkthdr.len = m->m_len = total_len - ether_crc_len;
+#else 
 		m->m_pkthdr.len = m->m_len = total_len - ETHER_CRC_LEN;
+#endif /* ! NETGRAPH */
 		m->m_pkthdr.rcvif = ifp;
 #ifndef __NO_STRICT_ALIGNMENT
 		vte_fixup_rx(ifp, m);
 #endif
 		VTE_UNLOCK(sc);
+#ifdef NETGRAPH
+		NG_TAP_INPUT(vte, sc, ifp, m);
+#else		
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		VTE_LOCK(sc);
 	}
 
@@ -1976,13 +2043,24 @@ vte_rxfilter(struct vte_softc *sc)
 	}
 
 	mcr = CSR_READ_2(sc, VTE_MCR0);
+#ifdef NETGRAPH
+	mcr &= ~(MCR0_ACCPT_ERR 
+		| MCR0_PROMISC 
+		| MCR0_MULTICAST);
+#else
 	mcr &= ~(MCR0_PROMISC | MCR0_MULTICAST);
+#endif /* ! NETGRAPH */
 	mcr |= MCR0_BROADCAST_DIS;
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		mcr &= ~MCR0_BROADCAST_DIS;
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-		if ((ifp->if_flags & IFF_PROMISC) != 0)
+		if ((ifp->if_flags & IFF_PROMISC) != 0) {
 			mcr |= MCR0_PROMISC;
+#ifdef NETGRAPH			
+			if (sc->vte_tap_hook != NULL)
+				mcr |= MCR0_ACCPT_ERR;
+#endif /* NETGRAPGH */
+		}
 		if ((ifp->if_flags & IFF_ALLMULTI) != 0)
 			mcr |= MCR0_MULTICAST;
 		mchash[0] = 0xFFFF;
