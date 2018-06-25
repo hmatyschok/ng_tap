@@ -27,7 +27,32 @@
  *
  *	from: NetBSD: gem.c,v 1.21 2002/06/01 23:50:58 lukem Exp
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/gem/if_gem.c 271811 2014-09-18 20:21:46Z glebius $");
 
@@ -81,6 +106,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/gem/if_gem.c 271811 2014-09-18 20:21:46Z
 
 #include <dev/gem/if_gemreg.h>
 #include <dev/gem/if_gemvar.h>
+#ifdef NETGRAPH
+#include <dev/gem/ng_gem_tap.h>
+NG_TAP_MODULE(gem, gem_softc, NG_GEM_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 CTASSERT(powerof2(GEM_NRXDESC) && GEM_NRXDESC >= 32 && GEM_NRXDESC <= 8192);
 CTASSERT(powerof2(GEM_NTXDESC) && GEM_NTXDESC >= 32 && GEM_NTXDESC <= 8192);
@@ -386,8 +415,11 @@ gem_attach(struct gem_softc *sc)
 	ifp->if_capabilities |= IFCAP_VLAN_MTU | IFCAP_HWCSUM;
 	ifp->if_hwassist |= sc->gem_csum_features;
 	ifp->if_capenable |= IFCAP_VLAN_MTU | IFCAP_HWCSUM;
-
-	return (0);
+#ifdef NETGRAPH
+	if ((error = ng_gem_tap_attach(sc)) != 0) 
+		gem_detach(sc);
+#endif /* NETGRAPH */
+	return (error);
 
 	/*
 	 * Free any resources we've allocated during the failed attach
@@ -425,7 +457,10 @@ gem_detach(struct gem_softc *sc)
 {
 	struct ifnet *ifp = sc->gem_ifp;
 	int i;
-
+	
+#ifdef NETGRAPH
+	ng_gem_tap_detach(sc);
+#endif /* NETGRAPH */
 	ether_ifdetach(ifp);
 	GEM_LOCK(sc);
 	gem_stop(ifp, 1);
@@ -1071,7 +1106,14 @@ gem_init_locked(struct gem_softc *sc)
 	/* step 12.  RX_MAC Configuration Register */
 	v = GEM_BANK1_READ_4(sc, GEM_MAC_RX_CONFIG);
 	v &= ~GEM_MAC_RX_ENABLE;
+#ifdef NETGRAPH
+	if (sc->gem_tap_hook != NULL)
+		v &= ~GEM_MAC_RX_STRIP_CRC;
+	else
+		v |= GEM_MAC_RX_STRIP_CRC;
+#else	
 	v |= GEM_MAC_RX_STRIP_CRC;
+#endif /* ! NETGRAPH */
 	sc->gem_mac_rxcfg = v;
 	/*
 	 * Clear the RX filter and reprogram it.  This will also set the
@@ -1582,9 +1624,17 @@ gem_rint(struct gem_softc *sc)
 		if (rxstat & GEM_RD_BAD_CRC) {
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 			device_printf(sc->gem_dev, "receive error: CRC error\n");
+#ifdef NETGRAPH
+			if (sc->gem_tap_hook == NULL) {
+				GEM_INIT_RXDESC(sc, sc->gem_rxptr);
+				m = NULL;
+				goto kickit;
+			}
+#else
 			GEM_INIT_RXDESC(sc, sc->gem_rxptr);
 			m = NULL;
 			goto kickit;
+#endif /* ! NETGRAPH */
 		}
 
 #ifdef GEM_DEBUG
@@ -1644,7 +1694,11 @@ gem_rint(struct gem_softc *sc)
 
 		/* Pass it on. */
 		GEM_UNLOCK(sc);
+#ifdef NETGRAPH
+		NG_TAP_INPUT(gem, sc, ifp, m);
+#else		
 		(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 		GEM_LOCK(sc);
 	}
 
@@ -2223,10 +2277,16 @@ gem_setladrf(struct gem_softc *sc)
 	    GEM_MAC_RX_ENABLE, 0))
 		device_printf(sc->gem_dev,
 		    "cannot disable RX MAC or hash filter\n");
-
 	v &= ~(GEM_MAC_RX_PROMISCUOUS | GEM_MAC_RX_PROMISC_GRP);
+#ifdef NETGRAPH
+	v |= GEM_MAC_RX_STRIP_CRC;	
+#endif /* NETGRAPH */
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		v |= GEM_MAC_RX_PROMISCUOUS;
+#ifdef NETGRAPH
+		if (sc->gem_tap_hook != NULL) 
+			v &= ~GEM_MAC_RX_STRIP_CRC;
+#endif /* NETGRAPH */		
 		goto chipit;
 	}
 	if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
