@@ -333,7 +333,7 @@ stge_miibus_statchg(device_t dev)
 	struct stge_softc *sc;
 
 	sc = device_get_softc(dev);
-	taskqueue_enqueue(taskqueue_swi, &sc->sc_link_task);
+	taskqueue_enqueue(taskqueue_swi, &sc->stge_link_task);
 }
 
 /*
@@ -348,7 +348,7 @@ stge_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 	struct mii_data *mii;
 
 	sc = ifp->if_softc;
-	mii = device_get_softc(sc->sc_miibus);
+	mii = device_get_softc(sc->stge_miibus);
 
 	mii_pollstat(mii);
 	ifmr->ifm_status = mii->mii_media_status;
@@ -367,7 +367,7 @@ stge_mediachange(struct ifnet *ifp)
 	struct mii_data *mii;
 
 	sc = ifp->if_softc;
-	mii = device_get_softc(sc->sc_miibus);
+	mii = device_get_softc(sc->stge_miibus);
 	mii_mediachg(mii);
 
 	return (0);
@@ -396,12 +396,12 @@ stge_read_eeprom(struct stge_softc *sc, int offset, uint16_t *data)
 {
 
 	if (stge_eeprom_wait(sc))
-		device_printf(sc->sc_dev, "EEPROM failed to come ready\n");
+		device_printf(sc->stge_dev, "EEPROM failed to come ready\n");
 
 	CSR_WRITE_2(sc, STGE_EepromCtrl,
 	    EC_EepromAddress(offset) | EC_EepromOpcode(EC_OP_RR));
 	if (stge_eeprom_wait(sc))
-		device_printf(sc->sc_dev, "EEPROM read timed out\n");
+		device_printf(sc->stge_dev, "EEPROM read timed out\n");
 	*data = CSR_READ_2(sc, STGE_EepromData);
 }
 
@@ -439,13 +439,13 @@ stge_attach(device_t dev)
 
 	error = 0;
 	sc = device_get_softc(dev);
-	sc->sc_dev = dev;
+	sc->stge_dev = dev;
 
-	mtx_init(&sc->sc_mtx, device_get_nameunit(dev), MTX_NETWORK_LOCK,
+	mtx_init(&sc->stge_mtx, device_get_nameunit(dev), MTX_NETWORK_LOCK,
 	    MTX_DEF);
-	mtx_init(&sc->sc_mii_mtx, "stge_mii_mutex", NULL, MTX_DEF);
-	callout_init_mtx(&sc->sc_tick_ch, &sc->sc_mtx, 0);
-	TASK_INIT(&sc->sc_link_task, 0, stge_link_task, sc);
+	mtx_init(&sc->stge_mii_mtx, "stge_mii_mutex", NULL, MTX_DEF);
+	callout_init_mtx(&sc->stge_tick_ch, &sc->stge_mtx, 0);
+	TASK_INIT(&sc->stge_link_task, 0, stge_link_task, sc);
 
 	/*
 	 * Map the device.
@@ -454,56 +454,56 @@ stge_attach(device_t dev)
 	cmd = pci_read_config(dev, PCIR_COMMAND, 2);
 	val = pci_read_config(dev, PCIR_BAR(1), 4);
 	if (PCI_BAR_IO(val))
-		sc->sc_spec = stge_res_spec_mem;
+		sc->stge_spec = stge_res_spec_mem;
 	else {
 		val = pci_read_config(dev, PCIR_BAR(0), 4);
 		if (!PCI_BAR_IO(val)) {
-			device_printf(sc->sc_dev, "couldn't locate IO BAR\n");
+			device_printf(sc->stge_dev, "couldn't locate IO BAR\n");
 			error = ENXIO;
 			goto fail;
 		}
-		sc->sc_spec = stge_res_spec_io;
+		sc->stge_spec = stge_res_spec_io;
 	}
-	error = bus_alloc_resources(dev, sc->sc_spec, sc->sc_res);
+	error = bus_alloc_resources(dev, sc->stge_spec, sc->stge_res);
 	if (error != 0) {
 		device_printf(dev, "couldn't allocate %s resources\n",
-		    sc->sc_spec == stge_res_spec_mem ? "memory" : "I/O");
+		    sc->stge_spec == stge_res_spec_mem ? "memory" : "I/O");
 		goto fail;
 	}
-	sc->sc_rev = pci_get_revid(dev);
+	sc->stge_rev = pci_get_revid(dev);
 
 	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO,
-	    "rxint_nframe", CTLTYPE_INT|CTLFLAG_RW, &sc->sc_rxint_nframe, 0,
+	    "rxint_nframe", CTLTYPE_INT|CTLFLAG_RW, &sc->stge_rxint_nframe, 0,
 	    sysctl_hw_stge_rxint_nframe, "I", "stge rx interrupt nframe");
 
 	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO,
-	    "rxint_dmawait", CTLTYPE_INT|CTLFLAG_RW, &sc->sc_rxint_dmawait, 0,
+	    "rxint_dmawait", CTLTYPE_INT|CTLFLAG_RW, &sc->stge_rxint_dmawait, 0,
 	    sysctl_hw_stge_rxint_dmawait, "I", "stge rx interrupt dmawait");
 
 	/* Pull in device tunables. */
-	sc->sc_rxint_nframe = STGE_RXINT_NFRAME_DEFAULT;
+	sc->stge_rxint_nframe = STGE_RXINT_NFRAME_DEFAULT;
 	error = resource_int_value(device_get_name(dev), device_get_unit(dev),
-	    "rxint_nframe", &sc->sc_rxint_nframe);
+	    "rxint_nframe", &sc->stge_rxint_nframe);
 	if (error == 0) {
-		if (sc->sc_rxint_nframe < STGE_RXINT_NFRAME_MIN ||
-		    sc->sc_rxint_nframe > STGE_RXINT_NFRAME_MAX) {
+		if (sc->stge_rxint_nframe < STGE_RXINT_NFRAME_MIN ||
+		    sc->stge_rxint_nframe > STGE_RXINT_NFRAME_MAX) {
 			device_printf(dev, "rxint_nframe value out of range; "
 			    "using default: %d\n", STGE_RXINT_NFRAME_DEFAULT);
-			sc->sc_rxint_nframe = STGE_RXINT_NFRAME_DEFAULT;
+			sc->stge_rxint_nframe = STGE_RXINT_NFRAME_DEFAULT;
 		}
 	}
 
-	sc->sc_rxint_dmawait = STGE_RXINT_DMAWAIT_DEFAULT;
+	sc->stge_rxint_dmawait = STGE_RXINT_DMAWAIT_DEFAULT;
 	error = resource_int_value(device_get_name(dev), device_get_unit(dev),
-	    "rxint_dmawait", &sc->sc_rxint_dmawait);
+	    "rxint_dmawait", &sc->stge_rxint_dmawait);
 	if (error == 0) {
-		if (sc->sc_rxint_dmawait < STGE_RXINT_DMAWAIT_MIN ||
-		    sc->sc_rxint_dmawait > STGE_RXINT_DMAWAIT_MAX) {
+		if (sc->stge_rxint_dmawait < STGE_RXINT_DMAWAIT_MIN ||
+		    sc->stge_rxint_dmawait > STGE_RXINT_DMAWAIT_MAX) {
 			device_printf(dev, "rxint_dmawait value out of range; "
 			    "using default: %d\n", STGE_RXINT_DMAWAIT_DEFAULT);
-			sc->sc_rxint_dmawait = STGE_RXINT_DMAWAIT_DEFAULT;
+			sc->stge_rxint_dmawait = STGE_RXINT_DMAWAIT_DEFAULT;
 		}
 	}
 
@@ -515,12 +515,12 @@ stge_attach(device_t dev)
 	 * reset the card.
 	 */
 	if (CSR_READ_4(sc, STGE_AsicCtrl) & AC_PhyMedia)
-		sc->sc_usefiber = 1;
+		sc->stge_usefiber = 1;
 	else
-		sc->sc_usefiber = 0;
+		sc->stge_usefiber = 0;
 
 	/* Load LED configuration from EEPROM. */
-	stge_read_eeprom(sc, STGE_EEPROM_LEDMode, &sc->sc_led);
+	stge_read_eeprom(sc, STGE_EEPROM_LEDMode, &sc->stge_led);
 
 	/*
 	 * Reset the chip to a known state.
@@ -548,7 +548,7 @@ stge_attach(device_t dev)
 		v = CSR_READ_2(sc, STGE_StationAddress2);
 		enaddr[4] = v & 0xff;
 		enaddr[5] = v >> 8;
-		sc->sc_stge1023 = 0;
+		sc->stge_stge1023 = 0;
 	} else {
 		uint16_t myaddr[ETHER_ADDR_LEN / 2];
 		for (i = 0; i <ETHER_ADDR_LEN / 2; i++) {
@@ -557,12 +557,12 @@ stge_attach(device_t dev)
 			myaddr[i] = le16toh(myaddr[i]);
 		}
 		bcopy(myaddr, enaddr, sizeof(enaddr));
-		sc->sc_stge1023 = 1;
+		sc->stge_stge1023 = 1;
 	}
 
-	ifp = sc->sc_ifp = if_alloc(IFT_ETHER);
+	ifp = sc->stge_ifp = if_alloc(IFT_ETHER);
 	if (ifp == NULL) {
-		device_printf(sc->sc_dev, "failed to if_alloc()\n");
+		device_printf(sc->stge_dev, "failed to if_alloc()\n");
 		error = ENXIO;
 		goto fail;
 	}
@@ -577,7 +577,7 @@ stge_attach(device_t dev)
 	IFQ_SET_MAXLEN(&ifp->if_snd, ifp->if_snd.ifq_drv_maxlen);
 	IFQ_SET_READY(&ifp->if_snd);
 	/* Revision B3 and earlier chips have checksum bug. */
-	if (sc->sc_rev >= 0x0c) {
+	if (sc->stge_rev >= 0x0c) {
 		ifp->if_hwassist = STGE_CSUM_FEATURES;
 		ifp->if_capabilities = IFCAP_HWCSUM;
 	} else {
@@ -590,18 +590,18 @@ stge_attach(device_t dev)
 	/*
 	 * Read some important bits from the PhyCtrl register.
 	 */
-	sc->sc_PhyCtrl = CSR_READ_1(sc, STGE_PhyCtrl) &
+	sc->stge_PhyCtrl = CSR_READ_1(sc, STGE_PhyCtrl) &
 	    (PC_PhyDuplexPolarity | PC_PhyLnkPolarity);
 
 	/* Set up MII bus. */
 	flags = MIIF_DOPAUSE;
-	if (sc->sc_rev >= 0x40 && sc->sc_rev <= 0x4e)
+	if (sc->stge_rev >= 0x40 && sc->stge_rev <= 0x4e)
 		flags |= MIIF_MACPRIV0;
-	error = mii_attach(sc->sc_dev, &sc->sc_miibus, ifp, stge_mediachange,
+	error = mii_attach(sc->stge_dev, &sc->stge_miibus, ifp, stge_mediachange,
 	    stge_mediastatus, BMSR_DEFCAPMASK, MII_PHY_ANY, MII_OFFSET_ANY,
 	    flags);
 	if (error != 0) {
-		device_printf(sc->sc_dev, "attaching PHYs failed\n");
+		device_printf(sc->stge_dev, "attaching PHYs failed\n");
 		goto fail;
 	}
 
@@ -609,7 +609,7 @@ stge_attach(device_t dev)
 
 	/* VLAN capability setup */
 	ifp->if_capabilities |= IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING;
-	if (sc->sc_rev >= 0x0c)
+	if (sc->stge_rev >= 0x0c)
 		ifp->if_capabilities |= IFCAP_VLAN_HWCSUM;
 	ifp->if_capenable = ifp->if_capabilities;
 #ifdef DEVICE_POLLING
@@ -628,24 +628,24 @@ stge_attach(device_t dev)
 	 * since the entire packet must be in the FIFO in order
 	 * for the chip to perform the checksum.
 	 */
-	sc->sc_txthresh = 0x0fff;
+	sc->stge_txthresh = 0x0fff;
 
 	/*
 	 * Disable MWI if the PCI layer tells us to.
 	 */
-	sc->sc_DMACtrl = 0;
+	sc->stge_DMACtrl = 0;
 	if ((cmd & PCIM_CMD_MWRICEN) == 0)
-		sc->sc_DMACtrl |= DMAC_MWIDisable;
+		sc->stge_DMACtrl |= DMAC_MWIDisable;
 
 	/*
 	 * Hookup IRQ
 	 */
-	error = bus_setup_intr(dev, sc->sc_res[1], INTR_TYPE_NET | INTR_MPSAFE,
-	    NULL, stge_intr, sc, &sc->sc_ih);
+	error = bus_setup_intr(dev, sc->stge_res[1], INTR_TYPE_NET | INTR_MPSAFE,
+	    NULL, stge_intr, sc, &sc->stge_ih);
 	if (error != 0) {
 		ether_ifdetach(ifp);
-		device_printf(sc->sc_dev, "couldn't set up IRQ\n");
-		sc->sc_ifp = NULL;
+		device_printf(sc->stge_dev, "couldn't set up IRQ\n");
+		sc->stge_ifp = NULL;
 		goto fail;
 	}
 
@@ -664,7 +664,7 @@ stge_detach(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 #ifdef DEVICE_POLLING
 	if (ifp && ifp->if_capenable & IFCAP_POLLING)
 		ether_poll_deregister(ifp);
@@ -672,34 +672,34 @@ stge_detach(device_t dev)
 	if (device_is_attached(dev)) {
 		STGE_LOCK(sc);
 		/* XXX */
-		sc->sc_detach = 1;
+		sc->stge_detach = 1;
 		stge_stop(sc);
 		STGE_UNLOCK(sc);
-		callout_drain(&sc->sc_tick_ch);
-		taskqueue_drain(taskqueue_swi, &sc->sc_link_task);
+		callout_drain(&sc->stge_tick_ch);
+		taskqueue_drain(taskqueue_swi, &sc->stge_link_task);
 		ether_ifdetach(ifp);
 	}
 
-	if (sc->sc_miibus != NULL) {
-		device_delete_child(dev, sc->sc_miibus);
-		sc->sc_miibus = NULL;
+	if (sc->stge_miibus != NULL) {
+		device_delete_child(dev, sc->stge_miibus);
+		sc->stge_miibus = NULL;
 	}
 	bus_generic_detach(dev);
 	stge_dma_free(sc);
 
 	if (ifp != NULL) {
 		if_free(ifp);
-		sc->sc_ifp = NULL;
+		sc->stge_ifp = NULL;
 	}
 
-	if (sc->sc_ih) {
-		bus_teardown_intr(dev, sc->sc_res[1], sc->sc_ih);
-		sc->sc_ih = NULL;
+	if (sc->stge_ih) {
+		bus_teardown_intr(dev, sc->stge_res[1], sc->stge_ih);
+		sc->stge_ih = NULL;
 	}
-	bus_release_resources(dev, sc->sc_spec, sc->sc_res);
+	bus_release_resources(dev, sc->stge_spec, sc->stge_res);
 
-	mtx_destroy(&sc->sc_mii_mtx);
-	mtx_destroy(&sc->sc_mtx);
+	mtx_destroy(&sc->stge_mii_mtx);
+	mtx_destroy(&sc->stge_mtx);
 
 	return (0);
 }
@@ -729,7 +729,7 @@ stge_dma_alloc(struct stge_softc *sc)
 	int error, i;
 
 	/* create parent tag. */
-	error = bus_dma_tag_create(bus_get_dma_tag(sc->sc_dev),/* parent */
+	error = bus_dma_tag_create(bus_get_dma_tag(sc->stge_dev),/* parent */
 		    1, 0,			/* algnmnt, boundary */
 		    STGE_DMA_MAXADDR,		/* lowaddr */
 		    BUS_SPACE_MAXADDR,		/* highaddr */
@@ -739,13 +739,13 @@ stge_dma_alloc(struct stge_softc *sc)
 		    BUS_SPACE_MAXSIZE_32BIT,	/* maxsegsize */
 		    0,				/* flags */
 		    NULL, NULL,			/* lockfunc, lockarg */
-		    &sc->sc_cdata.stge_parent_tag);
+		    &sc->stge_cdata.stge_parent_tag);
 	if (error != 0) {
-		device_printf(sc->sc_dev, "failed to create parent DMA tag\n");
+		device_printf(sc->stge_dev, "failed to create parent DMA tag\n");
 		goto fail;
 	}
 	/* create tag for Tx ring. */
-	error = bus_dma_tag_create(sc->sc_cdata.stge_parent_tag,/* parent */
+	error = bus_dma_tag_create(sc->stge_cdata.stge_parent_tag,/* parent */
 		    STGE_RING_ALIGN, 0,		/* algnmnt, boundary */
 		    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 		    BUS_SPACE_MAXADDR,		/* highaddr */
@@ -755,15 +755,15 @@ stge_dma_alloc(struct stge_softc *sc)
 		    STGE_TX_RING_SZ,		/* maxsegsize */
 		    0,				/* flags */
 		    NULL, NULL,			/* lockfunc, lockarg */
-		    &sc->sc_cdata.stge_tx_ring_tag);
+		    &sc->stge_cdata.stge_tx_ring_tag);
 	if (error != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to allocate Tx ring DMA tag\n");
 		goto fail;
 	}
 
 	/* create tag for Rx ring. */
-	error = bus_dma_tag_create(sc->sc_cdata.stge_parent_tag,/* parent */
+	error = bus_dma_tag_create(sc->stge_cdata.stge_parent_tag,/* parent */
 		    STGE_RING_ALIGN, 0,		/* algnmnt, boundary */
 		    BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
 		    BUS_SPACE_MAXADDR,		/* highaddr */
@@ -773,15 +773,15 @@ stge_dma_alloc(struct stge_softc *sc)
 		    STGE_RX_RING_SZ,		/* maxsegsize */
 		    0,				/* flags */
 		    NULL, NULL,			/* lockfunc, lockarg */
-		    &sc->sc_cdata.stge_rx_ring_tag);
+		    &sc->stge_cdata.stge_rx_ring_tag);
 	if (error != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to allocate Rx ring DMA tag\n");
 		goto fail;
 	}
 
 	/* create tag for Tx buffers. */
-	error = bus_dma_tag_create(sc->sc_cdata.stge_parent_tag,/* parent */
+	error = bus_dma_tag_create(sc->stge_cdata.stge_parent_tag,/* parent */
 		    1, 0,			/* algnmnt, boundary */
 		    BUS_SPACE_MAXADDR,		/* lowaddr */
 		    BUS_SPACE_MAXADDR,		/* highaddr */
@@ -791,14 +791,14 @@ stge_dma_alloc(struct stge_softc *sc)
 		    MCLBYTES,			/* maxsegsize */
 		    0,				/* flags */
 		    NULL, NULL,			/* lockfunc, lockarg */
-		    &sc->sc_cdata.stge_tx_tag);
+		    &sc->stge_cdata.stge_tx_tag);
 	if (error != 0) {
-		device_printf(sc->sc_dev, "failed to allocate Tx DMA tag\n");
+		device_printf(sc->stge_dev, "failed to allocate Tx DMA tag\n");
 		goto fail;
 	}
 
 	/* create tag for Rx buffers. */
-	error = bus_dma_tag_create(sc->sc_cdata.stge_parent_tag,/* parent */
+	error = bus_dma_tag_create(sc->stge_cdata.stge_parent_tag,/* parent */
 		    1, 0,			/* algnmnt, boundary */
 		    BUS_SPACE_MAXADDR,		/* lowaddr */
 		    BUS_SPACE_MAXADDR,		/* highaddr */
@@ -808,81 +808,81 @@ stge_dma_alloc(struct stge_softc *sc)
 		    MCLBYTES,			/* maxsegsize */
 		    0,				/* flags */
 		    NULL, NULL,			/* lockfunc, lockarg */
-		    &sc->sc_cdata.stge_rx_tag);
+		    &sc->stge_cdata.stge_rx_tag);
 	if (error != 0) {
-		device_printf(sc->sc_dev, "failed to allocate Rx DMA tag\n");
+		device_printf(sc->stge_dev, "failed to allocate Rx DMA tag\n");
 		goto fail;
 	}
 
 	/* allocate DMA'able memory and load the DMA map for Tx ring. */
-	error = bus_dmamem_alloc(sc->sc_cdata.stge_tx_ring_tag,
-	    (void **)&sc->sc_rdata.stge_tx_ring, BUS_DMA_NOWAIT |
-	    BUS_DMA_COHERENT | BUS_DMA_ZERO, &sc->sc_cdata.stge_tx_ring_map);
+	error = bus_dmamem_alloc(sc->stge_cdata.stge_tx_ring_tag,
+	    (void **)&sc->stge_rdata.stge_tx_ring, BUS_DMA_NOWAIT |
+	    BUS_DMA_COHERENT | BUS_DMA_ZERO, &sc->stge_cdata.stge_tx_ring_map);
 	if (error != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to allocate DMA'able memory for Tx ring\n");
 		goto fail;
 	}
 
 	ctx.stge_busaddr = 0;
-	error = bus_dmamap_load(sc->sc_cdata.stge_tx_ring_tag,
-	    sc->sc_cdata.stge_tx_ring_map, sc->sc_rdata.stge_tx_ring,
+	error = bus_dmamap_load(sc->stge_cdata.stge_tx_ring_tag,
+	    sc->stge_cdata.stge_tx_ring_map, sc->stge_rdata.stge_tx_ring,
 	    STGE_TX_RING_SZ, stge_dmamap_cb, &ctx, BUS_DMA_NOWAIT);
 	if (error != 0 || ctx.stge_busaddr == 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to load DMA'able memory for Tx ring\n");
 		goto fail;
 	}
-	sc->sc_rdata.stge_tx_ring_paddr = ctx.stge_busaddr;
+	sc->stge_rdata.stge_tx_ring_paddr = ctx.stge_busaddr;
 
 	/* allocate DMA'able memory and load the DMA map for Rx ring. */
-	error = bus_dmamem_alloc(sc->sc_cdata.stge_rx_ring_tag,
-	    (void **)&sc->sc_rdata.stge_rx_ring, BUS_DMA_NOWAIT |
-	    BUS_DMA_COHERENT | BUS_DMA_ZERO, &sc->sc_cdata.stge_rx_ring_map);
+	error = bus_dmamem_alloc(sc->stge_cdata.stge_rx_ring_tag,
+	    (void **)&sc->stge_rdata.stge_rx_ring, BUS_DMA_NOWAIT |
+	    BUS_DMA_COHERENT | BUS_DMA_ZERO, &sc->stge_cdata.stge_rx_ring_map);
 	if (error != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to allocate DMA'able memory for Rx ring\n");
 		goto fail;
 	}
 
 	ctx.stge_busaddr = 0;
-	error = bus_dmamap_load(sc->sc_cdata.stge_rx_ring_tag,
-	    sc->sc_cdata.stge_rx_ring_map, sc->sc_rdata.stge_rx_ring,
+	error = bus_dmamap_load(sc->stge_cdata.stge_rx_ring_tag,
+	    sc->stge_cdata.stge_rx_ring_map, sc->stge_rdata.stge_rx_ring,
 	    STGE_RX_RING_SZ, stge_dmamap_cb, &ctx, BUS_DMA_NOWAIT);
 	if (error != 0 || ctx.stge_busaddr == 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->stge_dev,
 		    "failed to load DMA'able memory for Rx ring\n");
 		goto fail;
 	}
-	sc->sc_rdata.stge_rx_ring_paddr = ctx.stge_busaddr;
+	sc->stge_rdata.stge_rx_ring_paddr = ctx.stge_busaddr;
 
 	/* create DMA maps for Tx buffers. */
 	for (i = 0; i < STGE_TX_RING_CNT; i++) {
-		txd = &sc->sc_cdata.stge_txdesc[i];
+		txd = &sc->stge_cdata.stge_txdesc[i];
 		txd->tx_m = NULL;
 		txd->tx_dmamap = 0;
-		error = bus_dmamap_create(sc->sc_cdata.stge_tx_tag, 0,
+		error = bus_dmamap_create(sc->stge_cdata.stge_tx_tag, 0,
 		    &txd->tx_dmamap);
 		if (error != 0) {
-			device_printf(sc->sc_dev,
+			device_printf(sc->stge_dev,
 			    "failed to create Tx dmamap\n");
 			goto fail;
 		}
 	}
 	/* create DMA maps for Rx buffers. */
-	if ((error = bus_dmamap_create(sc->sc_cdata.stge_rx_tag, 0,
-	    &sc->sc_cdata.stge_rx_sparemap)) != 0) {
-		device_printf(sc->sc_dev, "failed to create spare Rx dmamap\n");
+	if ((error = bus_dmamap_create(sc->stge_cdata.stge_rx_tag, 0,
+	    &sc->stge_cdata.stge_rx_sparemap)) != 0) {
+		device_printf(sc->stge_dev, "failed to create spare Rx dmamap\n");
 		goto fail;
 	}
 	for (i = 0; i < STGE_RX_RING_CNT; i++) {
-		rxd = &sc->sc_cdata.stge_rxdesc[i];
+		rxd = &sc->stge_cdata.stge_rxdesc[i];
 		rxd->rx_m = NULL;
 		rxd->rx_dmamap = 0;
-		error = bus_dmamap_create(sc->sc_cdata.stge_rx_tag, 0,
+		error = bus_dmamap_create(sc->stge_cdata.stge_rx_tag, 0,
 		    &rxd->rx_dmamap);
 		if (error != 0) {
-			device_printf(sc->sc_dev,
+			device_printf(sc->stge_dev,
 			    "failed to create Rx dmamap\n");
 			goto fail;
 		}
@@ -900,68 +900,68 @@ stge_dma_free(struct stge_softc *sc)
 	int i;
 
 	/* Tx ring */
-	if (sc->sc_cdata.stge_tx_ring_tag) {
-		if (sc->sc_rdata.stge_tx_ring_paddr)
-			bus_dmamap_unload(sc->sc_cdata.stge_tx_ring_tag,
-			    sc->sc_cdata.stge_tx_ring_map);
-		if (sc->sc_rdata.stge_tx_ring)
-			bus_dmamem_free(sc->sc_cdata.stge_tx_ring_tag,
-			    sc->sc_rdata.stge_tx_ring,
-			    sc->sc_cdata.stge_tx_ring_map);
-		sc->sc_rdata.stge_tx_ring = NULL;
-		sc->sc_rdata.stge_tx_ring_paddr = 0;
-		bus_dma_tag_destroy(sc->sc_cdata.stge_tx_ring_tag);
-		sc->sc_cdata.stge_tx_ring_tag = NULL;
+	if (sc->stge_cdata.stge_tx_ring_tag) {
+		if (sc->stge_rdata.stge_tx_ring_paddr)
+			bus_dmamap_unload(sc->stge_cdata.stge_tx_ring_tag,
+			    sc->stge_cdata.stge_tx_ring_map);
+		if (sc->stge_rdata.stge_tx_ring)
+			bus_dmamem_free(sc->stge_cdata.stge_tx_ring_tag,
+			    sc->stge_rdata.stge_tx_ring,
+			    sc->stge_cdata.stge_tx_ring_map);
+		sc->stge_rdata.stge_tx_ring = NULL;
+		sc->stge_rdata.stge_tx_ring_paddr = 0;
+		bus_dma_tag_destroy(sc->stge_cdata.stge_tx_ring_tag);
+		sc->stge_cdata.stge_tx_ring_tag = NULL;
 	}
 	/* Rx ring */
-	if (sc->sc_cdata.stge_rx_ring_tag) {
-		if (sc->sc_rdata.stge_rx_ring_paddr)
-			bus_dmamap_unload(sc->sc_cdata.stge_rx_ring_tag,
-			    sc->sc_cdata.stge_rx_ring_map);
-		if (sc->sc_rdata.stge_rx_ring)
-			bus_dmamem_free(sc->sc_cdata.stge_rx_ring_tag,
-			    sc->sc_rdata.stge_rx_ring,
-			    sc->sc_cdata.stge_rx_ring_map);
-		sc->sc_rdata.stge_rx_ring = NULL;
-		sc->sc_rdata.stge_rx_ring_paddr = 0;
-		bus_dma_tag_destroy(sc->sc_cdata.stge_rx_ring_tag);
-		sc->sc_cdata.stge_rx_ring_tag = NULL;
+	if (sc->stge_cdata.stge_rx_ring_tag) {
+		if (sc->stge_rdata.stge_rx_ring_paddr)
+			bus_dmamap_unload(sc->stge_cdata.stge_rx_ring_tag,
+			    sc->stge_cdata.stge_rx_ring_map);
+		if (sc->stge_rdata.stge_rx_ring)
+			bus_dmamem_free(sc->stge_cdata.stge_rx_ring_tag,
+			    sc->stge_rdata.stge_rx_ring,
+			    sc->stge_cdata.stge_rx_ring_map);
+		sc->stge_rdata.stge_rx_ring = NULL;
+		sc->stge_rdata.stge_rx_ring_paddr = 0;
+		bus_dma_tag_destroy(sc->stge_cdata.stge_rx_ring_tag);
+		sc->stge_cdata.stge_rx_ring_tag = NULL;
 	}
 	/* Tx buffers */
-	if (sc->sc_cdata.stge_tx_tag) {
+	if (sc->stge_cdata.stge_tx_tag) {
 		for (i = 0; i < STGE_TX_RING_CNT; i++) {
-			txd = &sc->sc_cdata.stge_txdesc[i];
+			txd = &sc->stge_cdata.stge_txdesc[i];
 			if (txd->tx_dmamap) {
-				bus_dmamap_destroy(sc->sc_cdata.stge_tx_tag,
+				bus_dmamap_destroy(sc->stge_cdata.stge_tx_tag,
 				    txd->tx_dmamap);
 				txd->tx_dmamap = 0;
 			}
 		}
-		bus_dma_tag_destroy(sc->sc_cdata.stge_tx_tag);
-		sc->sc_cdata.stge_tx_tag = NULL;
+		bus_dma_tag_destroy(sc->stge_cdata.stge_tx_tag);
+		sc->stge_cdata.stge_tx_tag = NULL;
 	}
 	/* Rx buffers */
-	if (sc->sc_cdata.stge_rx_tag) {
+	if (sc->stge_cdata.stge_rx_tag) {
 		for (i = 0; i < STGE_RX_RING_CNT; i++) {
-			rxd = &sc->sc_cdata.stge_rxdesc[i];
+			rxd = &sc->stge_cdata.stge_rxdesc[i];
 			if (rxd->rx_dmamap) {
-				bus_dmamap_destroy(sc->sc_cdata.stge_rx_tag,
+				bus_dmamap_destroy(sc->stge_cdata.stge_rx_tag,
 				    rxd->rx_dmamap);
 				rxd->rx_dmamap = 0;
 			}
 		}
-		if (sc->sc_cdata.stge_rx_sparemap) {
-			bus_dmamap_destroy(sc->sc_cdata.stge_rx_tag,
-			    sc->sc_cdata.stge_rx_sparemap);
-			sc->sc_cdata.stge_rx_sparemap = 0;
+		if (sc->stge_cdata.stge_rx_sparemap) {
+			bus_dmamap_destroy(sc->stge_cdata.stge_rx_tag,
+			    sc->stge_cdata.stge_rx_sparemap);
+			sc->stge_cdata.stge_rx_sparemap = 0;
 		}
-		bus_dma_tag_destroy(sc->sc_cdata.stge_rx_tag);
-		sc->sc_cdata.stge_rx_tag = NULL;
+		bus_dma_tag_destroy(sc->stge_cdata.stge_rx_tag);
+		sc->stge_cdata.stge_rx_tag = NULL;
 	}
 
-	if (sc->sc_cdata.stge_parent_tag) {
-		bus_dma_tag_destroy(sc->sc_cdata.stge_parent_tag);
-		sc->sc_cdata.stge_parent_tag = NULL;
+	if (sc->stge_cdata.stge_parent_tag) {
+		bus_dma_tag_destroy(sc->stge_cdata.stge_parent_tag);
+		sc->stge_cdata.stge_parent_tag = NULL;
 	}
 }
 
@@ -985,7 +985,7 @@ stge_setwol(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 	v = CSR_READ_1(sc, STGE_WakeEvent);
 	/* Disable all WOL bits. */
 	v &= ~(WE_WakePktEnable | WE_MagicPktEnable | WE_LinkEventEnable |
@@ -1011,7 +1011,7 @@ stge_suspend(device_t dev)
 
 	STGE_LOCK(sc);
 	stge_stop(sc);
-	sc->sc_suspended = 1;
+	sc->stge_suspended = 1;
 	stge_setwol(sc);
 	STGE_UNLOCK(sc);
 
@@ -1036,11 +1036,11 @@ stge_resume(device_t dev)
 	v &= ~(WE_WakePktEnable | WE_MagicPktEnable | WE_LinkEventEnable |
 	    WE_WakeOnLanEnable);
 	CSR_WRITE_1(sc, STGE_WakeEvent, v);
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 	if (ifp->if_flags & IFF_UP)
 		stge_init_locked(sc);
 
-	sc->sc_suspended = 0;
+	sc->stge_suspended = 0;
 	STGE_UNLOCK(sc);
 
 	return (0);
@@ -1058,7 +1058,7 @@ stge_dma_wait(struct stge_softc *sc)
 	}
 
 	if (i == STGE_TIMEOUT)
-		device_printf(sc->sc_dev, "DMA wait timed out\n");
+		device_printf(sc->stge_dev, "DMA wait timed out\n");
 }
 
 static int
@@ -1073,10 +1073,10 @@ stge_encap(struct stge_softc *sc, struct mbuf **m_head)
 
 	STGE_LOCK_ASSERT(sc);
 
-	if ((txd = STAILQ_FIRST(&sc->sc_cdata.stge_txfreeq)) == NULL)
+	if ((txd = STAILQ_FIRST(&sc->stge_cdata.stge_txfreeq)) == NULL)
 		return (ENOBUFS);
 
-	error =  bus_dmamap_load_mbuf_sg(sc->sc_cdata.stge_tx_tag,
+	error =  bus_dmamap_load_mbuf_sg(sc->stge_cdata.stge_tx_tag,
 	    txd->tx_dmamap, *m_head, txsegs, &nsegs, 0);
 	if (error == EFBIG) {
 		m = m_collapse(*m_head, M_NOWAIT, STGE_MAXTXSEGS);
@@ -1086,7 +1086,7 @@ stge_encap(struct stge_softc *sc, struct mbuf **m_head)
 			return (ENOMEM);
 		}
 		*m_head = m;
-		error = bus_dmamap_load_mbuf_sg(sc->sc_cdata.stge_tx_tag,
+		error = bus_dmamap_load_mbuf_sg(sc->stge_cdata.stge_tx_tag,
 		    txd->tx_dmamap, *m_head, txsegs, &nsegs, 0);
 		if (error != 0) {
 			m_freem(*m_head);
@@ -1112,21 +1112,21 @@ stge_encap(struct stge_softc *sc, struct mbuf **m_head)
 			csum_flags |= TFD_UDPChecksumEnable;
 	}
 
-	si = sc->sc_cdata.stge_tx_prod;
-	tfd = &sc->sc_rdata.stge_tx_ring[si];
+	si = sc->stge_cdata.stge_tx_prod;
+	tfd = &sc->stge_rdata.stge_tx_ring[si];
 	for (i = 0; i < nsegs; i++)
 		tfd->tfd_frags[i].frag_word0 =
 		    htole64(FRAG_ADDR(txsegs[i].ds_addr) |
 		    FRAG_LEN(txsegs[i].ds_len));
-	sc->sc_cdata.stge_tx_cnt++;
+	sc->stge_cdata.stge_tx_cnt++;
 
 	tfc = TFD_FrameId(si) | TFD_WordAlign(TFD_WordAlign_disable) |
 	    TFD_FragCount(nsegs) | csum_flags;
-	if (sc->sc_cdata.stge_tx_cnt >= STGE_TX_HIWAT)
+	if (sc->stge_cdata.stge_tx_cnt >= STGE_TX_HIWAT)
 		tfc |= TFD_TxDMAIndicate;
 
 	/* Update producer index. */
-	sc->sc_cdata.stge_tx_prod = (si + 1) % STGE_TX_RING_CNT;
+	sc->stge_cdata.stge_tx_prod = (si + 1) % STGE_TX_RING_CNT;
 
 	/* Check if we have a VLAN tag to insert. */
 	if (m->m_flags & M_VLANTAG)
@@ -1134,15 +1134,15 @@ stge_encap(struct stge_softc *sc, struct mbuf **m_head)
 	tfd->tfd_control = htole64(tfc);
 
 	/* Update Tx Queue. */
-	STAILQ_REMOVE_HEAD(&sc->sc_cdata.stge_txfreeq, tx_q);
-	STAILQ_INSERT_TAIL(&sc->sc_cdata.stge_txbusyq, txd, tx_q);
+	STAILQ_REMOVE_HEAD(&sc->stge_cdata.stge_txfreeq, tx_q);
+	STAILQ_INSERT_TAIL(&sc->stge_cdata.stge_txbusyq, txd, tx_q);
 	txd->tx_m = m;
 
 	/* Sync descriptors. */
-	bus_dmamap_sync(sc->sc_cdata.stge_tx_tag, txd->tx_dmamap,
+	bus_dmamap_sync(sc->stge_cdata.stge_tx_tag, txd->tx_dmamap,
 	    BUS_DMASYNC_PREWRITE);
-	bus_dmamap_sync(sc->sc_cdata.stge_tx_ring_tag,
-	    sc->sc_cdata.stge_tx_ring_map,
+	bus_dmamap_sync(sc->stge_cdata.stge_tx_ring_tag,
+	    sc->stge_cdata.stge_tx_ring_map,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	return (0);
@@ -1176,11 +1176,11 @@ stge_start_locked(struct ifnet *ifp)
 	STGE_LOCK_ASSERT(sc);
 
 	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING|IFF_DRV_OACTIVE)) !=
-	    IFF_DRV_RUNNING || sc->sc_link == 0)
+	    IFF_DRV_RUNNING || sc->stge_link == 0)
 		return;
 
 	for (enq = 0; !IFQ_DRV_IS_EMPTY(&ifp->if_snd); ) {
-		if (sc->sc_cdata.stge_tx_cnt >= STGE_TX_HIWAT) {
+		if (sc->stge_cdata.stge_tx_cnt >= STGE_TX_HIWAT) {
 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
 			break;
 		}
@@ -1214,7 +1214,7 @@ stge_start_locked(struct ifnet *ifp)
 		CSR_WRITE_4(sc, STGE_DMACtrl, DMAC_TxDMAPollNow);
 
 		/* Set a timeout in case the chip goes out to lunch. */
-		sc->sc_watchdog_timer = 5;
+		sc->stge_watchdog_timer = 5;
 	}
 }
 
@@ -1230,11 +1230,11 @@ stge_watchdog(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	if (sc->sc_watchdog_timer == 0 || --sc->sc_watchdog_timer)
+	if (sc->stge_watchdog_timer == 0 || --sc->stge_watchdog_timer)
 		return;
 
-	ifp = sc->sc_ifp;
-	if_printf(sc->sc_ifp, "device timeout\n");
+	ifp = sc->stge_ifp;
+	if_printf(sc->stge_ifp, "device timeout\n");
 	if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 	ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	stge_init_locked(sc);
@@ -1276,18 +1276,18 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		STGE_LOCK(sc);
 		if ((ifp->if_flags & IFF_UP) != 0) {
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
-				if (((ifp->if_flags ^ sc->sc_if_flags)
+				if (((ifp->if_flags ^ sc->stge_if_flags)
 				    & IFF_PROMISC) != 0)
 					stge_set_filter(sc);
 			} else {
-				if (sc->sc_detach == 0)
+				if (sc->stge_detach == 0)
 					stge_init_locked(sc);
 			}
 		} else {
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
 				stge_stop(sc);
 		}
-		sc->sc_if_flags = ifp->if_flags;
+		sc->stge_if_flags = ifp->if_flags;
 		STGE_UNLOCK(sc);
 		break;
 	case SIOCADDMULTI:
@@ -1299,7 +1299,7 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
-		mii = device_get_softc(sc->sc_miibus);
+		mii = device_get_softc(sc->stge_miibus);
 		error = ifmedia_ioctl(ifp, ifr, &mii->mii_media, cmd);
 		break;
 	case SIOCSIFCAP:
@@ -1320,7 +1320,7 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 					break;
 				STGE_LOCK(sc);
 				CSR_WRITE_2(sc, STGE_IntEnable,
-				    sc->sc_IntEnable);
+				    sc->stge_IntEnable);
 				ifp->if_capenable &= ~IFCAP_POLLING;
 				STGE_UNLOCK(sc);
 			}
@@ -1368,29 +1368,29 @@ stge_link_task(void *arg, int pending)
 	sc = (struct stge_softc *)arg;
 	STGE_LOCK(sc);
 
-	mii = device_get_softc(sc->sc_miibus);
+	mii = device_get_softc(sc->stge_miibus);
 	if (mii->mii_media_status & IFM_ACTIVE) {
 		if (IFM_SUBTYPE(mii->mii_media_active) != IFM_NONE)
-			sc->sc_link = 1;
+			sc->stge_link = 1;
 	} else
-		sc->sc_link = 0;
+		sc->stge_link = 0;
 
-	sc->sc_MACCtrl = 0;
+	sc->stge_MACCtrl = 0;
 	if (((mii->mii_media_active & IFM_GMASK) & IFM_FDX) != 0)
-		sc->sc_MACCtrl |= MC_DuplexSelect;
+		sc->stge_MACCtrl |= MC_DuplexSelect;
 	if (((mii->mii_media_active & IFM_GMASK) & IFM_ETH_RXPAUSE) != 0)
-		sc->sc_MACCtrl |= MC_RxFlowControlEnable;
+		sc->stge_MACCtrl |= MC_RxFlowControlEnable;
 	if (((mii->mii_media_active & IFM_GMASK) & IFM_ETH_TXPAUSE) != 0)
-		sc->sc_MACCtrl |= MC_TxFlowControlEnable;
+		sc->stge_MACCtrl |= MC_TxFlowControlEnable;
 	/*
 	 * Update STGE_MACCtrl register depending on link status.
 	 * (duplex, flow control etc)
 	 */
 	v = ac = CSR_READ_4(sc, STGE_MACCtrl) & MC_MASK;
 	v &= ~(MC_DuplexSelect|MC_RxFlowControlEnable|MC_TxFlowControlEnable);
-	v |= sc->sc_MACCtrl;
+	v |= sc->stge_MACCtrl;
 	CSR_WRITE_4(sc, STGE_MACCtrl, v);
-	if (((ac ^ sc->sc_MACCtrl) & MC_DuplexSelect) != 0) {
+	if (((ac ^ sc->stge_MACCtrl) & MC_DuplexSelect) != 0) {
 		/* Duplex setting changed, reset Tx/Rx functions. */
 		ac = CSR_READ_4(sc, STGE_AsicCtrl);
 		ac |= AC_TxReset | AC_RxReset;
@@ -1401,7 +1401,7 @@ stge_link_task(void *arg, int pending)
 				break;
 		}
 		if (i == STGE_TIMEOUT)
-			device_printf(sc->sc_dev, "reset failed to complete\n");
+			device_printf(sc->stge_dev, "reset failed to complete\n");
 	}
 	STGE_UNLOCK(sc);
 }
@@ -1423,11 +1423,11 @@ stge_tx_error(struct stge_softc *sc)
 			 * There should be a more better way to recover
 			 * from Tx underrun instead of a full reset.
 			 */
-			if (sc->sc_nerr++ < STGE_MAXERR)
-				device_printf(sc->sc_dev, "Tx underrun, "
+			if (sc->stge_nerr++ < STGE_MAXERR)
+				device_printf(sc->stge_dev, "Tx underrun, "
 				    "resetting...\n");
-			if (sc->sc_nerr == STGE_MAXERR)
-				device_printf(sc->sc_dev, "too many errors; "
+			if (sc->stge_nerr == STGE_MAXERR)
+				device_printf(sc->stge_dev, "too many errors; "
 				    "not reporting any more\n");
 			error = -1;
 			break;
@@ -1456,7 +1456,7 @@ stge_intr(void *arg)
 	uint16_t status;
 
 	sc = (struct stge_softc *)arg;
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
 	STGE_LOCK(sc);
 
@@ -1465,18 +1465,18 @@ stge_intr(void *arg)
 		goto done_locked;
 #endif
 	status = CSR_READ_2(sc, STGE_IntStatus);
-	if (sc->sc_suspended || (status & IS_InterruptStatus) == 0)
+	if (sc->stge_suspended || (status & IS_InterruptStatus) == 0)
 		goto done_locked;
 
 	/* Disable interrupts. */
 	for (reinit = 0;;) {
 		status = CSR_READ_2(sc, STGE_IntStatusAck);
-		status &= sc->sc_IntEnable;
+		status &= sc->stge_IntEnable;
 		if (status == 0)
 			break;
 		/* Host interface errors. */
 		if ((status & IS_HostError) != 0) {
-			device_printf(sc->sc_dev,
+			device_printf(sc->stge_dev,
 			    "Host interface error, resetting...\n");
 			reinit = 1;
 			goto force_init;
@@ -1508,7 +1508,7 @@ force_init:
 	}
 
 	/* Re-enable interrupts. */
-	CSR_WRITE_2(sc, STGE_IntEnable, sc->sc_IntEnable);
+	CSR_WRITE_2(sc, STGE_IntEnable, sc->stge_IntEnable);
 
 	/* Try to get more packets going. */
 	if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
@@ -1533,45 +1533,45 @@ stge_txeof(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
-	txd = STAILQ_FIRST(&sc->sc_cdata.stge_txbusyq);
+	txd = STAILQ_FIRST(&sc->stge_cdata.stge_txbusyq);
 	if (txd == NULL)
 		return;
-	bus_dmamap_sync(sc->sc_cdata.stge_tx_ring_tag,
-	    sc->sc_cdata.stge_tx_ring_map, BUS_DMASYNC_POSTREAD);
+	bus_dmamap_sync(sc->stge_cdata.stge_tx_ring_tag,
+	    sc->stge_cdata.stge_tx_ring_map, BUS_DMASYNC_POSTREAD);
 
 	/*
 	 * Go through our Tx list and free mbufs for those
 	 * frames which have been transmitted.
 	 */
-	for (cons = sc->sc_cdata.stge_tx_cons;;
+	for (cons = sc->stge_cdata.stge_tx_cons;;
 	    cons = (cons + 1) % STGE_TX_RING_CNT) {
-		if (sc->sc_cdata.stge_tx_cnt <= 0)
+		if (sc->stge_cdata.stge_tx_cnt <= 0)
 			break;
-		control = le64toh(sc->sc_rdata.stge_tx_ring[cons].tfd_control);
+		control = le64toh(sc->stge_rdata.stge_tx_ring[cons].tfd_control);
 		if ((control & TFD_TFDDone) == 0)
 			break;
-		sc->sc_cdata.stge_tx_cnt--;
+		sc->stge_cdata.stge_tx_cnt--;
 		ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 
-		bus_dmamap_sync(sc->sc_cdata.stge_tx_tag, txd->tx_dmamap,
+		bus_dmamap_sync(sc->stge_cdata.stge_tx_tag, txd->tx_dmamap,
 		    BUS_DMASYNC_POSTWRITE);
-		bus_dmamap_unload(sc->sc_cdata.stge_tx_tag, txd->tx_dmamap);
+		bus_dmamap_unload(sc->stge_cdata.stge_tx_tag, txd->tx_dmamap);
 
 		/* Output counter is updated with statistics register */
 		m_freem(txd->tx_m);
 		txd->tx_m = NULL;
-		STAILQ_REMOVE_HEAD(&sc->sc_cdata.stge_txbusyq, tx_q);
-		STAILQ_INSERT_TAIL(&sc->sc_cdata.stge_txfreeq, txd, tx_q);
-		txd = STAILQ_FIRST(&sc->sc_cdata.stge_txbusyq);
+		STAILQ_REMOVE_HEAD(&sc->stge_cdata.stge_txbusyq, tx_q);
+		STAILQ_INSERT_TAIL(&sc->stge_cdata.stge_txfreeq, txd, tx_q);
+		txd = STAILQ_FIRST(&sc->stge_cdata.stge_txbusyq);
 	}
-	sc->sc_cdata.stge_tx_cons = cons;
-	if (sc->sc_cdata.stge_tx_cnt == 0)
-		sc->sc_watchdog_timer = 0;
+	sc->stge_cdata.stge_tx_cons = cons;
+	if (sc->stge_cdata.stge_tx_cnt == 0)
+		sc->stge_watchdog_timer = 0;
 
-        bus_dmamap_sync(sc->sc_cdata.stge_tx_ring_tag,
-	    sc->sc_cdata.stge_tx_ring_map,
+        bus_dmamap_sync(sc->stge_cdata.stge_tx_ring_tag,
+	    sc->stge_cdata.stge_tx_ring_map,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 }
 
@@ -1580,7 +1580,7 @@ stge_discard_rxbuf(struct stge_softc *sc, int idx)
 {
 	struct stge_rfd *rfd;
 
-	rfd = &sc->sc_rdata.stge_rx_ring[idx];
+	rfd = &sc->stge_rdata.stge_rx_ring[idx];
 	rfd->rfd_status = 0;
 }
 
@@ -1641,27 +1641,27 @@ stge_rxeof(struct stge_softc *sc)
 	STGE_LOCK_ASSERT(sc);
 
 	rx_npkts = 0;
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
-	bus_dmamap_sync(sc->sc_cdata.stge_rx_ring_tag,
-	    sc->sc_cdata.stge_rx_ring_map, BUS_DMASYNC_POSTREAD);
+	bus_dmamap_sync(sc->stge_cdata.stge_rx_ring_tag,
+	    sc->stge_cdata.stge_rx_ring_map, BUS_DMASYNC_POSTREAD);
 
 	prog = 0;
-	for (cons = sc->sc_cdata.stge_rx_cons; prog < STGE_RX_RING_CNT;
+	for (cons = sc->stge_cdata.stge_rx_cons; prog < STGE_RX_RING_CNT;
 	    prog++, cons = (cons + 1) % STGE_RX_RING_CNT) {
-		status64 = le64toh(sc->sc_rdata.stge_rx_ring[cons].rfd_status);
+		status64 = le64toh(sc->stge_rdata.stge_rx_ring[cons].rfd_status);
 		status = RFD_RxStatus(status64);
 		if ((status & RFD_RFDDone) == 0)
 			break;
 #ifdef DEVICE_POLLING
 		if (ifp->if_capenable & IFCAP_POLLING) {
-			if (sc->sc_cdata.stge_rxcycles <= 0)
+			if (sc->stge_cdata.stge_rxcycles <= 0)
 				break;
-			sc->sc_cdata.stge_rxcycles--;
+			sc->stge_cdata.stge_rxcycles--;
 		}
 #endif
 		prog++;
-		rxd = &sc->sc_cdata.stge_rxdesc[cons];
+		rxd = &sc->stge_cdata.stge_rxdesc[cons];
 		mp = rxd->rx_m;
 
 		/*
@@ -1673,8 +1673,8 @@ stge_rxeof(struct stge_softc *sc)
 		    RFD_RxAlignmentError | RFD_RxFCSError |
 		    RFD_RxLengthError)) != 0) {
 			stge_discard_rxbuf(sc, cons);
-			if (sc->sc_cdata.stge_rxhead != NULL) {
-				m_freem(sc->sc_cdata.stge_rxhead);
+			if (sc->stge_cdata.stge_rxhead != NULL) {
+				m_freem(sc->stge_cdata.stge_rxhead);
 				STGE_RXCHAIN_RESET(sc);
 			}
 			continue;
@@ -1685,8 +1685,8 @@ stge_rxeof(struct stge_softc *sc)
 		if (stge_newbuf(sc, cons) != 0) {
 			if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
 			stge_discard_rxbuf(sc, cons);
-			if (sc->sc_cdata.stge_rxhead != NULL) {
-				m_freem(sc->sc_cdata.stge_rxhead);
+			if (sc->stge_cdata.stge_rxhead != NULL) {
+				m_freem(sc->stge_cdata.stge_rxhead);
 				STGE_RXCHAIN_RESET(sc);
 			}
 			continue;
@@ -1694,25 +1694,25 @@ stge_rxeof(struct stge_softc *sc)
 
 		if ((status & RFD_FrameEnd) != 0)
 			mp->m_len = RFD_RxDMAFrameLen(status) -
-			    sc->sc_cdata.stge_rxlen;
-		sc->sc_cdata.stge_rxlen += mp->m_len;
+			    sc->stge_cdata.stge_rxlen;
+		sc->stge_cdata.stge_rxlen += mp->m_len;
 
 		/* Chain mbufs. */
-		if (sc->sc_cdata.stge_rxhead == NULL) {
-			sc->sc_cdata.stge_rxhead = mp;
-			sc->sc_cdata.stge_rxtail = mp;
+		if (sc->stge_cdata.stge_rxhead == NULL) {
+			sc->stge_cdata.stge_rxhead = mp;
+			sc->stge_cdata.stge_rxtail = mp;
 		} else {
 			mp->m_flags &= ~M_PKTHDR;
-			sc->sc_cdata.stge_rxtail->m_next = mp;
-			sc->sc_cdata.stge_rxtail = mp;
+			sc->stge_cdata.stge_rxtail->m_next = mp;
+			sc->stge_cdata.stge_rxtail = mp;
 		}
 
 		if ((status & RFD_FrameEnd) != 0) {
-			m = sc->sc_cdata.stge_rxhead;
+			m = sc->stge_cdata.stge_rxhead;
 			m->m_pkthdr.rcvif = ifp;
-			m->m_pkthdr.len = sc->sc_cdata.stge_rxlen;
+			m->m_pkthdr.len = sc->stge_cdata.stge_rxlen;
 
-			if (m->m_pkthdr.len > sc->sc_if_framesize) {
+			if (m->m_pkthdr.len > sc->stge_if_framesize) {
 				m_freem(m);
 				STGE_RXCHAIN_RESET(sc);
 				continue;
@@ -1740,7 +1740,7 @@ stge_rxeof(struct stge_softc *sc)
 			}
 
 #ifndef __NO_STRICT_ALIGNMENT
-			if (sc->sc_if_framesize > (MCLBYTES - ETHER_ALIGN)) {
+			if (sc->stge_if_framesize > (MCLBYTES - ETHER_ALIGN)) {
 				if ((m = stge_fixup_rx(sc, m)) == NULL) {
 					STGE_RXCHAIN_RESET(sc);
 					continue;
@@ -1766,9 +1766,9 @@ stge_rxeof(struct stge_softc *sc)
 
 	if (prog > 0) {
 		/* Update the consumer index. */
-		sc->sc_cdata.stge_rx_cons = cons;
-		bus_dmamap_sync(sc->sc_cdata.stge_rx_ring_tag,
-		    sc->sc_cdata.stge_rx_ring_map,
+		sc->stge_cdata.stge_rx_cons = cons;
+		bus_dmamap_sync(sc->stge_cdata.stge_rx_ring_tag,
+		    sc->stge_cdata.stge_rx_ring_map,
 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 	return (rx_npkts);
@@ -1790,16 +1790,16 @@ stge_poll(struct ifnet *ifp, enum poll_cmd cmd, int count)
 		return (rx_npkts);
 	}
 
-	sc->sc_cdata.stge_rxcycles = count;
+	sc->stge_cdata.stge_rxcycles = count;
 	rx_npkts = stge_rxeof(sc);
 	stge_txeof(sc);
 
 	if (cmd == POLL_AND_CHECK_STATUS) {
 		status = CSR_READ_2(sc, STGE_IntStatus);
-		status &= sc->sc_IntEnable;
+		status &= sc->stge_IntEnable;
 		if (status != 0) {
 			if ((status & IS_HostError) != 0) {
-				device_printf(sc->sc_dev,
+				device_printf(sc->stge_dev,
 				    "Host interface error, resetting...\n");
 				ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 				stge_init_locked(sc);
@@ -1837,7 +1837,7 @@ stge_tick(void *arg)
 
 	STGE_LOCK_ASSERT(sc);
 
-	mii = device_get_softc(sc->sc_miibus);
+	mii = device_get_softc(sc->stge_miibus);
 	mii_tick(mii);
 
 	/* Update statistics counters. */
@@ -1849,12 +1849,12 @@ stge_tick(void *arg)
 	 * for every frame. This limits the delay to a maximum of one
 	 * second.
 	 */
-	if (sc->sc_cdata.stge_tx_cnt != 0)
+	if (sc->stge_cdata.stge_tx_cnt != 0)
 		stge_txeof(sc);
 
 	stge_watchdog(sc);
 
-	callout_reset(&sc->sc_tick_ch, hz, stge_tick, sc);
+	callout_reset(&sc->stge_tick_ch, hz, stge_tick, sc);
 }
 
 /*
@@ -1869,7 +1869,7 @@ stge_stats_update(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
 	CSR_READ_4(sc,STGE_OctetRcvOk);
 
@@ -1925,7 +1925,7 @@ stge_reset(struct stge_softc *sc, uint32_t how)
 		 */
 		ac |= AC_GlobalReset | AC_RxReset | AC_TxReset |
 		    AC_DMA | AC_FIFO | AC_Network | AC_Host | AC_AutoInit |
-		    (sc->sc_usefiber ? AC_RstOut : 0);
+		    (sc->stge_usefiber ? AC_RstOut : 0);
 		break;
 	}
 
@@ -1941,23 +1941,23 @@ stge_reset(struct stge_softc *sc, uint32_t how)
 	}
 
 	if (i == STGE_TIMEOUT)
-		device_printf(sc->sc_dev, "reset failed to complete\n");
+		device_printf(sc->stge_dev, "reset failed to complete\n");
 
 	/* Set LED, from Linux IPG driver. */
 	ac = CSR_READ_4(sc, STGE_AsicCtrl);
 	ac &= ~(AC_LEDMode | AC_LEDSpeed | AC_LEDModeBit1);
-	if ((sc->sc_led & 0x01) != 0)
+	if ((sc->stge_led & 0x01) != 0)
 		ac |= AC_LEDMode;
-	if ((sc->sc_led & 0x03) != 0)
+	if ((sc->stge_led & 0x03) != 0)
 		ac |= AC_LEDModeBit1;
-	if ((sc->sc_led & 0x08) != 0)
+	if ((sc->stge_led & 0x08) != 0)
 		ac |= AC_LEDSpeed;
 	CSR_WRITE_4(sc, STGE_AsicCtrl, ac);
 
 	/* Set PHY, from Linux IPG driver */
 	v = CSR_READ_1(sc, STGE_PhySet);
 	v &= ~(PS_MemLenb9b | PS_MemLen | PS_NonCompdet);
-	v |= ((sc->sc_led & 0x70) >> 4);
+	v |= ((sc->stge_led & 0x70) >> 4);
 	CSR_WRITE_1(sc, STGE_PhySet, v);
 }
 
@@ -1988,10 +1988,10 @@ stge_init_locked(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
 		return;
-	mii = device_get_softc(sc->sc_miibus);
+	mii = device_get_softc(sc->stge_miibus);
 
 	/*
 	 * Cancel any pending I/O.
@@ -2006,7 +2006,7 @@ stge_init_locked(struct stge_softc *sc)
 	/* Init descriptors. */
 	error = stge_init_rx_ring(sc);
         if (error != 0) {
-                device_printf(sc->sc_dev,
+                device_printf(sc->stge_dev,
                     "initialization failed: no memory for rx buffers\n");
                 stge_stop(sc);
 		goto out;
@@ -2059,7 +2059,7 @@ stge_init_locked(struct stge_softc *sc)
 	CSR_WRITE_1(sc, STGE_RxDMAPollPeriod, 1);
 
 	/* Initialize the Tx start threshold. */
-	CSR_WRITE_2(sc, STGE_TxStartThresh, sc->sc_txthresh);
+	CSR_WRITE_2(sc, STGE_TxStartThresh, sc->stge_txthresh);
 
 	/* Rx DMA thresholds, from Linux */
 	CSR_WRITE_1(sc, STGE_RxDMABurstThresh, 0x30);
@@ -2080,13 +2080,13 @@ stge_init_locked(struct stge_softc *sc)
 	 * deferring the interrupt, and signal it immediately.
 	 */
 	CSR_WRITE_4(sc, STGE_RxDMAIntCtrl,
-	    RDIC_RxFrameCount(sc->sc_rxint_nframe) |
-	    RDIC_RxDMAWaitTime(STGE_RXINT_USECS2TICK(sc->sc_rxint_dmawait)));
+	    RDIC_RxFrameCount(sc->stge_rxint_nframe) |
+	    RDIC_RxDMAWaitTime(STGE_RXINT_USECS2TICK(sc->stge_rxint_dmawait)));
 
 	/*
 	 * Initialize the interrupt mask.
 	 */
-	sc->sc_IntEnable = IS_HostError | IS_TxComplete |
+	sc->stge_IntEnable = IS_HostError | IS_TxComplete |
 	    IS_TxDMAComplete | IS_RxDMAComplete | IS_RFDListEnd;
 #ifdef DEVICE_POLLING
 	/* Disable interrupts if we are polling. */
@@ -2094,13 +2094,13 @@ stge_init_locked(struct stge_softc *sc)
 		CSR_WRITE_2(sc, STGE_IntEnable, 0);
 	else
 #endif
-	CSR_WRITE_2(sc, STGE_IntEnable, sc->sc_IntEnable);
+	CSR_WRITE_2(sc, STGE_IntEnable, sc->stge_IntEnable);
 
 	/*
 	 * Configure the DMA engine.
 	 * XXX Should auto-tune TxBurstLimit.
 	 */
-	CSR_WRITE_4(sc, STGE_DMACtrl, sc->sc_DMACtrl | DMAC_TxBurstLimit(3));
+	CSR_WRITE_4(sc, STGE_DMACtrl, sc->stge_DMACtrl | DMAC_TxBurstLimit(3));
 
 	/*
 	 * Send a PAUSE frame when we reach 29,696 bytes in the Rx
@@ -2113,8 +2113,8 @@ stge_init_locked(struct stge_softc *sc)
 	/*
 	 * Set the maximum frame size.
 	 */
-	sc->sc_if_framesize = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
-	CSR_WRITE_2(sc, STGE_MaxFrameSize, sc->sc_if_framesize);
+	sc->stge_if_framesize = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	CSR_WRITE_2(sc, STGE_MaxFrameSize, sc->stge_if_framesize);
 
 	/*
 	 * Initialize MacCtrl -- do it before setting the media,
@@ -2128,7 +2128,7 @@ stge_init_locked(struct stge_softc *sc)
 
 	stge_vlan_setup(sc);
 
-	if (sc->sc_rev >= 6) {		/* >= B.2 */
+	if (sc->stge_rev >= 6) {		/* >= B.2 */
 		/* Multi-frag frame bug work-around. */
 		CSR_WRITE_2(sc, STGE_DebugCtrl,
 		    CSR_READ_2(sc, STGE_DebugCtrl) | 0x0200);
@@ -2151,7 +2151,7 @@ stge_init_locked(struct stge_softc *sc)
 	stge_start_tx(sc);
 	stge_start_rx(sc);
 
-	sc->sc_link = 0;
+	sc->stge_link = 0;
 	/*
 	 * Set the current media.
 	 */
@@ -2160,7 +2160,7 @@ stge_init_locked(struct stge_softc *sc)
 	/*
 	 * Start the one second MII clock.
 	 */
-	callout_reset(&sc->sc_tick_ch, hz, stge_tick, sc);
+	callout_reset(&sc->stge_tick_ch, hz, stge_tick, sc);
 
 	/*
 	 * ...all done!
@@ -2170,7 +2170,7 @@ stge_init_locked(struct stge_softc *sc)
 
  out:
 	if (error != 0)
-		device_printf(sc->sc_dev, "interface not running\n");
+		device_printf(sc->stge_dev, "interface not running\n");
 }
 
 static void
@@ -2179,7 +2179,7 @@ stge_vlan_setup(struct stge_softc *sc)
 	struct ifnet *ifp;
 	uint32_t v;
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 	/*
 	 * The NIC always copy a VLAN tag regardless of STGE_MACCtrl
 	 * MC_AutoVLANuntagging bit.
@@ -2212,8 +2212,8 @@ stge_stop(struct stge_softc *sc)
 	/*
 	 * Stop the one second clock.
 	 */
-	callout_stop(&sc->sc_tick_ch);
-	sc->sc_watchdog_timer = 0;
+	callout_stop(&sc->stge_tick_ch);
+	sc->stge_watchdog_timer = 0;
 
 	/*
 	 * Disable interrupts.
@@ -2242,22 +2242,22 @@ stge_stop(struct stge_softc *sc)
 	 * Free RX and TX mbufs still in the queues.
 	 */
 	for (i = 0; i < STGE_RX_RING_CNT; i++) {
-		rxd = &sc->sc_cdata.stge_rxdesc[i];
+		rxd = &sc->stge_cdata.stge_rxdesc[i];
 		if (rxd->rx_m != NULL) {
-			bus_dmamap_sync(sc->sc_cdata.stge_rx_tag,
+			bus_dmamap_sync(sc->stge_cdata.stge_rx_tag,
 			    rxd->rx_dmamap, BUS_DMASYNC_POSTREAD);
-			bus_dmamap_unload(sc->sc_cdata.stge_rx_tag,
+			bus_dmamap_unload(sc->stge_cdata.stge_rx_tag,
 			    rxd->rx_dmamap);
 			m_freem(rxd->rx_m);
 			rxd->rx_m = NULL;
 		}
         }
 	for (i = 0; i < STGE_TX_RING_CNT; i++) {
-		txd = &sc->sc_cdata.stge_txdesc[i];
+		txd = &sc->stge_cdata.stge_txdesc[i];
 		if (txd->tx_m != NULL) {
-			bus_dmamap_sync(sc->sc_cdata.stge_tx_tag,
+			bus_dmamap_sync(sc->stge_cdata.stge_tx_tag,
 			    txd->tx_dmamap, BUS_DMASYNC_POSTWRITE);
-			bus_dmamap_unload(sc->sc_cdata.stge_tx_tag,
+			bus_dmamap_unload(sc->stge_cdata.stge_tx_tag,
 			    txd->tx_dmamap);
 			m_freem(txd->tx_m);
 			txd->tx_m = NULL;
@@ -2267,9 +2267,9 @@ stge_stop(struct stge_softc *sc)
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 	ifp->if_drv_flags &= ~(IFF_DRV_RUNNING | IFF_DRV_OACTIVE);
-	sc->sc_link = 0;
+	sc->stge_link = 0;
 }
 
 static void
@@ -2291,7 +2291,7 @@ stge_start_tx(struct stge_softc *sc)
 			break;
 	}
 	if (i == 0)
-		device_printf(sc->sc_dev, "Starting Tx MAC timed out\n");
+		device_printf(sc->stge_dev, "Starting Tx MAC timed out\n");
 }
 
 static void
@@ -2313,7 +2313,7 @@ stge_start_rx(struct stge_softc *sc)
 			break;
 	}
 	if (i == 0)
-		device_printf(sc->sc_dev, "Starting Rx MAC timed out\n");
+		device_printf(sc->stge_dev, "Starting Rx MAC timed out\n");
 }
 
 static void
@@ -2334,7 +2334,7 @@ stge_stop_tx(struct stge_softc *sc)
 			break;
 	}
 	if (i == 0)
-		device_printf(sc->sc_dev, "Stopping Tx MAC timed out\n");
+		device_printf(sc->stge_dev, "Stopping Tx MAC timed out\n");
 }
 
 static void
@@ -2355,7 +2355,7 @@ stge_stop_rx(struct stge_softc *sc)
 			break;
 	}
 	if (i == 0)
-		device_printf(sc->sc_dev, "Stopping Rx MAC timed out\n");
+		device_printf(sc->stge_dev, "Stopping Rx MAC timed out\n");
 }
 
 static void
@@ -2366,14 +2366,14 @@ stge_init_tx_ring(struct stge_softc *sc)
 	bus_addr_t addr;
 	int i;
 
-	STAILQ_INIT(&sc->sc_cdata.stge_txfreeq);
-	STAILQ_INIT(&sc->sc_cdata.stge_txbusyq);
+	STAILQ_INIT(&sc->stge_cdata.stge_txfreeq);
+	STAILQ_INIT(&sc->stge_cdata.stge_txbusyq);
 
-	sc->sc_cdata.stge_tx_prod = 0;
-	sc->sc_cdata.stge_tx_cons = 0;
-	sc->sc_cdata.stge_tx_cnt = 0;
+	sc->stge_cdata.stge_tx_prod = 0;
+	sc->stge_cdata.stge_tx_cons = 0;
+	sc->stge_cdata.stge_tx_cnt = 0;
 
-	rd = &sc->sc_rdata;
+	rd = &sc->stge_rdata;
 	bzero(rd->stge_tx_ring, STGE_TX_RING_SZ);
 	for (i = 0; i < STGE_TX_RING_CNT; i++) {
 		if (i == (STGE_TX_RING_CNT - 1))
@@ -2382,12 +2382,12 @@ stge_init_tx_ring(struct stge_softc *sc)
 			addr = STGE_TX_RING_ADDR(sc, i + 1);
 		rd->stge_tx_ring[i].tfd_next = htole64(addr);
 		rd->stge_tx_ring[i].tfd_control = htole64(TFD_TFDDone);
-		txd = &sc->sc_cdata.stge_txdesc[i];
-		STAILQ_INSERT_TAIL(&sc->sc_cdata.stge_txfreeq, txd, tx_q);
+		txd = &sc->stge_cdata.stge_txdesc[i];
+		STAILQ_INSERT_TAIL(&sc->stge_cdata.stge_txfreeq, txd, tx_q);
 	}
 
-	bus_dmamap_sync(sc->sc_cdata.stge_tx_ring_tag,
-	    sc->sc_cdata.stge_tx_ring_map,
+	bus_dmamap_sync(sc->stge_cdata.stge_tx_ring_tag,
+	    sc->stge_cdata.stge_tx_ring_map,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 }
@@ -2399,10 +2399,10 @@ stge_init_rx_ring(struct stge_softc *sc)
 	bus_addr_t addr;
 	int i;
 
-	sc->sc_cdata.stge_rx_cons = 0;
+	sc->stge_cdata.stge_rx_cons = 0;
 	STGE_RXCHAIN_RESET(sc);
 
-	rd = &sc->sc_rdata;
+	rd = &sc->stge_rdata;
 	bzero(rd->stge_rx_ring, STGE_RX_RING_SZ);
 	for (i = 0; i < STGE_RX_RING_CNT; i++) {
 		if (stge_newbuf(sc, i) != 0)
@@ -2415,8 +2415,8 @@ stge_init_rx_ring(struct stge_softc *sc)
 		rd->stge_rx_ring[i].rfd_status = 0;
 	}
 
-	bus_dmamap_sync(sc->sc_cdata.stge_rx_ring_tag,
-	    sc->sc_cdata.stge_rx_ring_map,
+	bus_dmamap_sync(sc->stge_cdata.stge_rx_ring_tag,
+	    sc->stge_cdata.stge_rx_ring_map,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	return (0);
@@ -2445,30 +2445,30 @@ stge_newbuf(struct stge_softc *sc, int idx)
 	 * The hardware requires 4bytes aligned DMA address when JUMBO
 	 * frame is used.
 	 */
-	if (sc->sc_if_framesize <= (MCLBYTES - ETHER_ALIGN))
+	if (sc->stge_if_framesize <= (MCLBYTES - ETHER_ALIGN))
 		m_adj(m, ETHER_ALIGN);
 
-	if (bus_dmamap_load_mbuf_sg(sc->sc_cdata.stge_rx_tag,
-	    sc->sc_cdata.stge_rx_sparemap, m, segs, &nsegs, 0) != 0) {
+	if (bus_dmamap_load_mbuf_sg(sc->stge_cdata.stge_rx_tag,
+	    sc->stge_cdata.stge_rx_sparemap, m, segs, &nsegs, 0) != 0) {
 		m_freem(m);
 		return (ENOBUFS);
 	}
 	KASSERT(nsegs == 1, ("%s: %d segments returned!", __func__, nsegs));
 
-	rxd = &sc->sc_cdata.stge_rxdesc[idx];
+	rxd = &sc->stge_cdata.stge_rxdesc[idx];
 	if (rxd->rx_m != NULL) {
-		bus_dmamap_sync(sc->sc_cdata.stge_rx_tag, rxd->rx_dmamap,
+		bus_dmamap_sync(sc->stge_cdata.stge_rx_tag, rxd->rx_dmamap,
 		    BUS_DMASYNC_POSTREAD);
-		bus_dmamap_unload(sc->sc_cdata.stge_rx_tag, rxd->rx_dmamap);
+		bus_dmamap_unload(sc->stge_cdata.stge_rx_tag, rxd->rx_dmamap);
 	}
 	map = rxd->rx_dmamap;
-	rxd->rx_dmamap = sc->sc_cdata.stge_rx_sparemap;
-	sc->sc_cdata.stge_rx_sparemap = map;
-	bus_dmamap_sync(sc->sc_cdata.stge_rx_tag, rxd->rx_dmamap,
+	rxd->rx_dmamap = sc->stge_cdata.stge_rx_sparemap;
+	sc->stge_cdata.stge_rx_sparemap = map;
+	bus_dmamap_sync(sc->stge_cdata.stge_rx_tag, rxd->rx_dmamap,
 	    BUS_DMASYNC_PREREAD);
 	rxd->rx_m = m;
 
-	rfd = &sc->sc_rdata.stge_rx_ring[idx];
+	rfd = &sc->stge_rdata.stge_rx_ring[idx];
 	rfd->rfd_frag.frag_word0 =
 	    htole64(FRAG_ADDR(segs[0].ds_addr) | FRAG_LEN(segs[0].ds_len));
 	rfd->rfd_status = 0;
@@ -2489,7 +2489,7 @@ stge_set_filter(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
 	mode = CSR_READ_2(sc, STGE_ReceiveMode);
 	mode |= RM_ReceiveUnicast;
@@ -2517,7 +2517,7 @@ stge_set_multi(struct stge_softc *sc)
 
 	STGE_LOCK_ASSERT(sc);
 
-	ifp = sc->sc_ifp;
+	ifp = sc->stge_ifp;
 
 	mode = CSR_READ_2(sc, STGE_ReceiveMode);
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
@@ -2544,8 +2544,8 @@ stge_set_multi(struct stge_softc *sc)
 	bzero(mchash, sizeof(mchash));
 
 	count = 0;
-	if_maddr_rlock(sc->sc_ifp);
-	TAILQ_FOREACH(ifma, &sc->sc_ifp->if_multiaddrs, ifma_link) {
+	if_maddr_rlock(sc->stge_ifp);
+	TAILQ_FOREACH(ifma, &sc->stge_ifp->if_multiaddrs, ifma_link) {
 		if (ifma->ifma_addr->sa_family != AF_LINK)
 			continue;
 		crc = ether_crc32_be(LLADDR((struct sockaddr_dl *)

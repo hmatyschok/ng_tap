@@ -86,21 +86,21 @@
  * Register access macros
  */
 #define CSR_WRITE_4(_sc, reg, val)	\
-	bus_write_4((_sc)->sc_res[0], (reg), (val))
+	bus_write_4((_sc)->stge_res[0], (reg), (val))
 #define CSR_WRITE_2(_sc, reg, val)	\
-	bus_write_2((_sc)->sc_res[0], (reg), (val))
+	bus_write_2((_sc)->stge_res[0], (reg), (val))
 #define CSR_WRITE_1(_sc, reg, val)	\
-	bus_write_1((_sc)->sc_res[0], (reg), (val))
+	bus_write_1((_sc)->stge_res[0], (reg), (val))
 
 #define CSR_READ_4(_sc, reg)		\
-	bus_read_4((_sc)->sc_res[0], (reg))
+	bus_read_4((_sc)->stge_res[0], (reg))
 #define CSR_READ_2(_sc, reg)		\
-	bus_read_2((_sc)->sc_res[0], (reg))
+	bus_read_2((_sc)->stge_res[0], (reg))
 #define CSR_READ_1(_sc, reg)		\
-	bus_read_1((_sc)->sc_res[0], (reg))
+	bus_read_1((_sc)->stge_res[0], (reg))
 
 #define	CSR_BARRIER(_sc, reg, length, flags)				\
-	bus_barrier((_sc)->sc_res[0], reg, length, flags)
+	bus_barrier((_sc)->stge_res[0], reg, length, flags)
 
 /*
  * TC9021 buffer fragment descriptor.
@@ -580,7 +580,7 @@ struct stge_rxdesc {
 
 #define	STGE_RING_ALIGN		8
 
-struct stge_chain_data{
+struct stge_chain_data {
 	bus_dma_tag_t		stge_parent_tag;
 	bus_dma_tag_t		stge_tx_tag;
 	struct stge_txdesc	stge_txdesc[STGE_TX_RING_CNT];
@@ -614,9 +614,9 @@ struct stge_ring_data {
 };
 
 #define STGE_TX_RING_ADDR(sc, i)	\
-    ((sc)->sc_rdata.stge_tx_ring_paddr + sizeof(struct stge_tfd) * (i))
+    ((sc)->stge_rdata.stge_tx_ring_paddr + sizeof(struct stge_tfd) * (i))
 #define STGE_RX_RING_ADDR(sc, i)	\
-    ((sc)->sc_rdata.stge_rx_ring_paddr + sizeof(struct stge_rfd) * (i))
+    ((sc)->stge_rdata.stge_rx_ring_paddr + sizeof(struct stge_rfd) * (i))
 
 #define STGE_TX_RING_SZ		\
     (sizeof(struct stge_tfd) * STGE_TX_RING_CNT)
@@ -627,55 +627,55 @@ struct stge_ring_data {
  * Software state per device.
  */
 struct stge_softc {
-	struct ifnet 		*sc_ifp;	/* interface info */
-	device_t		sc_dev;
-	device_t		sc_miibus;
-	struct resource		*sc_res[2];
-	struct resource_spec	*sc_spec;
-	void			*sc_ih;		/* interrupt cookie */
-	int			sc_rev;		/* silicon revision */
+	struct ifnet 		*stge_ifp;	/* interface info */
+	device_t		stge_dev;
+	device_t		stge_miibus;
+	struct resource		*stge_res[2];
+	struct resource_spec	*stge_spec;
+	void			*stge_ih;		/* interrupt cookie */
+	int			stge_rev;		/* silicon revision */
 
-	struct callout		sc_tick_ch;	/* tick callout */
+	struct callout		stge_tick_ch;	/* tick callout */
 
-	struct stge_chain_data	sc_cdata;
-	struct stge_ring_data	sc_rdata;
-	int			sc_if_flags;
-	int			sc_if_framesize;
-	int			sc_txthresh;	/* Tx threshold */
-	uint32_t		sc_usefiber:1;	/* if we're fiber */
-	uint32_t		sc_stge1023:1;	/* are we a 1023 */
-	uint32_t		sc_DMACtrl;	/* prototype DMACtrl reg. */
-	uint32_t		sc_MACCtrl;	/* prototype MacCtrl reg. */
-	uint16_t		sc_IntEnable;	/* prototype IntEnable reg. */
-	uint16_t		sc_led;		/* LED conf. from EEPROM */
-	uint8_t			sc_PhyCtrl;	/* prototype PhyCtrl reg. */
-	int			sc_suspended;
-	int			sc_detach;
+	struct stge_chain_data	stge_cdata;
+	struct stge_ring_data	stge_rdata;
+	int			stge_if_flags;
+	int			stge_if_framesize;
+	int			stge_txthresh;	/* Tx threshold */
+	uint32_t		stge_usefiber:1;	/* if we're fiber */
+	uint32_t		stge_stge1023:1;	/* are we a 1023 */
+	uint32_t		stge_DMACtrl;	/* prototype DMACtrl reg. */
+	uint32_t		stge_MACCtrl;	/* prototype MacCtrl reg. */
+	uint16_t		stge_IntEnable;	/* prototype IntEnable reg. */
+	uint16_t		stge_led;		/* LED conf. from EEPROM */
+	uint8_t			stge_PhyCtrl;	/* prototype PhyCtrl reg. */
+	int			stge_suspended;
+	int			stge_detach;
 
-	int			sc_rxint_nframe;
-	int			sc_rxint_dmawait;
-	int			sc_nerr;
-	int			sc_watchdog_timer;
-	int			sc_link;
+	int			stge_rxint_nframe;
+	int			stge_rxint_dmawait;
+	int			stge_nerr;
+	int			stge_watchdog_timer;
+	int			stge_link;
 
-	struct task		sc_link_task;
-	struct mtx		sc_mii_mtx;	/* MII mutex */
-	struct mtx		sc_mtx;
+	struct task		stge_link_task;
+	struct mtx		stge_mii_mtx;	/* MII mutex */
+	struct mtx		stge_mtx;
 };
 
-#define STGE_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define STGE_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
-#define STGE_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
-#define STGE_MII_LOCK(_sc)	mtx_lock(&(_sc)->sc_mii_mtx)
-#define STGE_MII_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mii_mtx)
+#define STGE_LOCK(_sc)		mtx_lock(&(_sc)->stge_mtx)
+#define STGE_UNLOCK(_sc)	mtx_unlock(&(_sc)->stge_mtx)
+#define STGE_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->stge_mtx, MA_OWNED)
+#define STGE_MII_LOCK(_sc)	mtx_lock(&(_sc)->stge_mii_mtx)
+#define STGE_MII_UNLOCK(_sc)	mtx_unlock(&(_sc)->stge_mii_mtx)
 
 #define	STGE_MAXERR	5
 
 #define	STGE_RXCHAIN_RESET(_sc)						\
 do {									\
-	(_sc)->sc_cdata.stge_rxhead = NULL;				\
-	(_sc)->sc_cdata.stge_rxtail = NULL;				\
-	(_sc)->sc_cdata.stge_rxlen = 0;					\
+	(_sc)->stge_cdata.stge_rxhead = NULL;				\
+	(_sc)->stge_cdata.stge_rxtail = NULL;				\
+	(_sc)->stge_cdata.stge_rxlen = 0;					\
 } while (/*CONSTCOND*/0)
 
 #define STGE_TIMEOUT 1000
