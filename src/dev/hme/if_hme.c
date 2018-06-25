@@ -1736,13 +1736,14 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 	 * and hash filter.  Depending on the case, the right bit will be
 	 * enabled.
 	 */
-#ifdef NETGRAPH	 HME_MAC_RXCFG_DCRCS
-	macc &= ~(HME_MAC_RXCFG_PGRP 
-		| HME_MAC_RXCFG_PMISC
-		| HME_MAC_RXCFG_DCRCS);
-#else
+#ifdef NETGRAPH
+	if (sc->hme_tap_hook != NULL)
+		v |= HME_MAC_RXCFG_DCRCS;
+	else 
+		v &= ~(HME_MAC_RXCFG_DCRCS);
+#endif /* NETGRAPH */		
 	macc &= ~(HME_MAC_RXCFG_PGRP | HME_MAC_RXCFG_PMISC);
-#endif /* ! NETGRAPH */
+
 	/*
 	 * Disable the receiver while changing it's state as the documentation
 	 * mandates.
@@ -1765,12 +1766,7 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 		macc &= ~HME_MAC_RXCFG_ENABLE;
 
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
-		macc |= HME_MAC_RXCFG_PMISC;
-#ifdef NETGRAAPH 
-		if (sc->hme_tap_hook != NULL) {
-			macc |= HME_MAC_RXCFG_DCRCS;
-		}
-#endif /* NETGRAPH */		
+		macc |= HME_MAC_RXCFG_PMISC;	
 		goto chipit;
 	}
 	if ((ifp->if_flags & IFF_ALLMULTI) != 0) {

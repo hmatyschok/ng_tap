@@ -2279,14 +2279,13 @@ gem_setladrf(struct gem_softc *sc)
 		    "cannot disable RX MAC or hash filter\n");
 	v &= ~(GEM_MAC_RX_PROMISCUOUS | GEM_MAC_RX_PROMISC_GRP);
 #ifdef NETGRAPH
-	v |= GEM_MAC_RX_STRIP_CRC;	
+	if (sc->gem_tap_hook != NULL)
+		v &= ~GEM_MAC_RX_STRIP_CRC;
+	else
+		v |= GEM_MAC_RX_STRIP_CRC;	
 #endif /* NETGRAPH */
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
-		v |= GEM_MAC_RX_PROMISCUOUS;
-#ifdef NETGRAPH
-		if (sc->gem_tap_hook != NULL) 
-			v &= ~GEM_MAC_RX_STRIP_CRC;
-#endif /* NETGRAPH */		
+		v |= GEM_MAC_RX_PROMISCUOUS;	
 		goto chipit;
 	}
 	if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
