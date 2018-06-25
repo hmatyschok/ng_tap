@@ -618,18 +618,15 @@ msk_rxfilter(struct msk_if_softc *sc_if)
 
 	bzero(mchash, sizeof(mchash));
 	mode = GMAC_READ_2(sc, sc_if->msk_port, GM_RX_CTRL);
-	if ((ifp->if_flags & IFF_PROMISC) != 0)
+	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 #ifdef NETGRAPH	
-		if (sc_if->msk_tap_hook != NULL) {
-			mode &= ~(GM_RXCR_UCF_ENA 
-				| GM_RXCR_MCF_ENA
-				| GM_RXCR_CRC_DIS);
-		} else
-			mode &= ~(GM_RXCR_UCF_ENA | GM_RXCR_MCF_ENA);
-#else	
+		if (sc_if->msk_tap_hook != NULL) 
+			mode &= ~(GM_RXCR_CRC_DIS);
+		else
+			mode |= GM_RXCR_CRC_DIS;
+#endif /* NETGRAPH */
 		mode &= ~(GM_RXCR_UCF_ENA | GM_RXCR_MCF_ENA);
-#endif /* ! NETGRAPH */
-	else if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
+	} else if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
 		mode |= GM_RXCR_UCF_ENA | GM_RXCR_MCF_ENA;
 		mchash[0] = 0xffff;
 		mchash[1] = 0xffff;

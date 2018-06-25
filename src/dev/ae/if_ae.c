@@ -2029,7 +2029,7 @@ ae_rx_intr(ae_softc_t *sc)
 
 #ifdef NETGRAPH
 	msk = (sc->ae_tap_hook != NULL) 
-		? AE_RXD_SUCCESS|AE_RXD_CRCERR : AE_RXD_SUCCESS; 
+		? (AE_RXD_SUCCESS|AE_RXD_CRCERR) : AE_RXD_SUCCESS; 
 #endif /* NETGRAPH */
 
 	ifp = sc->ae_ifp;
@@ -2056,14 +2056,12 @@ ae_rx_intr(ae_softc_t *sc)
 
 #ifdef NETGRAPH
 		if ((flags & msk) != 0) {
+			if ((flags & AE_RXD_SUCCESS) == 0)
+				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 #else
 		if ((flags & AE_RXD_SUCCESS) != 0) {
 #endif /* ! NETGRAPH */
 			ae_rxeof(sc, rxd);
-#ifdef NETGRAPH			
-			if ((flags & AE_RXD_SUCCESS) == 0)
-				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-#endif /* NETGRAPH */
 		} else
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 	}

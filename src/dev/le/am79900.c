@@ -326,8 +326,8 @@ am79900_rint(struct lance_softc *sc)
 					if_printf(ifp,
 					    "receive buffer error\n");					    
 #ifdef NETGRAPH					    
-				if (rmd1 & LE_R1_CRC) {
-					if (sc->le_tap_hook != NULL) {
+				if (sc->le_tap_hook != NULL) {
+					if (rmd1 & LE_R1_CRC) {
 						m = lance_get(sc, 
 							LE_RBUFADDR(sc, bix),
 							(LE_LE32TOH(rmd.rmd2) & 0xfff));

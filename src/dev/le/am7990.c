@@ -310,12 +310,12 @@ am7990_rint(struct lance_softc *sc)
 				if (rmd.rmd1_bits & LE_R1_BUFF)
 					if_printf(ifp,
 					    "receive buffer error\n");
-#ifdef NETGRAPH					    
-				if (rmd.rmd1_bits & LE_R1_CRC) {
-					if (sc->le_tap_hook != NULL) {
+#ifdef NETGRAPH							
+				if (sc->le_tap_hook != NULL) {
+					if (rmd.rmd1_bits & LE_R1_CRC) {
 						m = lance_get(sc, 
 							LE_RBUFADDR(sc, bix),
-							(LE_LE32TOH(rmd.rmd2) & 0xfff));
+							(LE_LE32TOH(rmd.rmd3) & 0xfff));
 					}
 				}
 #endif /* NETGRAPH */
@@ -330,10 +330,10 @@ am7990_rint(struct lance_softc *sc)
 			/* Pull the packet off the interface. */
 #ifdef NETGRAPH
 			m = lance_get(sc, LE_RBUFADDR(sc, bix),
-			    (LE_LE32TOH(rmd.rmd2) & 0xfff) - ether_crc_len);
+			    (LE_LE32TOH(rmd.rmd3) & 0xfff) - ether_crc_len);
 #else			
 			m = lance_get(sc, LE_RBUFADDR(sc, bix),
-			    (LE_LE32TOH(rmd.rmd2) & 0xfff) - ETHER_CRC_LEN);
+			    (LE_LE32TOH(rmd.rmd3) & 0xfff) - ETHER_CRC_LEN);
 #endif /* ! NETGRAPH */
 		}
 

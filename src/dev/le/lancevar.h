@@ -61,7 +61,7 @@
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
 #include <netgraph/ng_parse.h>
-#endif
+#endif /* NETGRAPH */
 
 /* $FreeBSD: releng/11.1/sys/dev/le/lancevar.h 204646 2010-03-03 17:55:51Z joel $ */
 
