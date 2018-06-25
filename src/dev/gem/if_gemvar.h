@@ -27,12 +27,45 @@
  *
  * $FreeBSD: releng/11.1/sys/dev/gem/if_gemvar.h 223648 2011-06-28 16:16:43Z marius $
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 #ifndef	_IF_GEMVAR_H
 #define	_IF_GEMVAR_H
 
+#include "opt_netgraph.h"
+
 #include <sys/queue.h>
 #include <sys/callout.h>
+
+#ifdef NETGRAPH
+#include <netgraph/ng_message.h>
+#include <netgraph/netgraph.h>
+#include <netgraph/ng_parse.h>
+#endif /* NETGRAPH */
 
 /*
  * Transmit descriptor ring size - this is arbitrary, but allocate
@@ -104,29 +137,29 @@ struct gem_rxsoft {
  * software state per device
  */
 struct gem_softc {
-	struct ifnet	*sc_ifp;
-	struct mtx	sc_mtx;
-	device_t	sc_miibus;
-	struct mii_data	*sc_mii;	/* MII media control */
-	device_t	sc_dev;		/* generic device information */
-	u_char		sc_enaddr[ETHER_ADDR_LEN];
-	struct callout	sc_tick_ch;	/* tick callout */
-	struct callout	sc_rx_ch;	/* delayed RX callout */
-	u_int		sc_wdog_timer;	/* watchdog timer */
+	struct ifnet	*gem_ifp;
+	struct mtx	gem_mtx;
+	device_t	gem_miibus;
+	struct mii_data	*gem_mii;	/* MII media control */
+	device_t	gem_dev;		/* generic device information */
+	u_char		gem_enaddr[ETHER_ADDR_LEN];
+	struct callout	gem_tick_ch;	/* tick callout */
+	struct callout	gem_rx_ch;	/* delayed RX callout */
+	u_int		gem_wdog_timer;	/* watchdog timer */
 
-	void		*sc_ih;
-	struct resource *sc_res[3];
+	void		*gem_ih;
+	struct resource *gem_res[3];
 #define	GEM_RES_INTR		0
 #define	GEM_RES_BANK1		1
 #define	GEM_RES_BANK2		2
 
-	bus_dma_tag_t	sc_pdmatag;	/* parent bus DMA tag */
-	bus_dma_tag_t	sc_rdmatag;	/* RX bus DMA tag */
-	bus_dma_tag_t	sc_tdmatag;	/* TX bus DMA tag */
-	bus_dma_tag_t	sc_cdmatag;	/* control data bus DMA tag */
-	bus_dmamap_t	sc_dmamap;	/* bus DMA handle */
+	bus_dma_tag_t	gem_pdmatag;	/* parent bus DMA tag */
+	bus_dma_tag_t	gem_rdmatag;	/* RX bus DMA tag */
+	bus_dma_tag_t	gem_tdmatag;	/* TX bus DMA tag */
+	bus_dma_tag_t	gem_cdmatag;	/* control data bus DMA tag */
+	bus_dmamap_t	gem_dmamap;	/* bus DMA handle */
 
-	u_int		sc_variant;
+	u_int		gem_variant;
 #define	GEM_UNKNOWN		0	/* don't know */
 #define	GEM_SUN_GEM		1	/* Sun GEM */
 #define	GEM_SUN_ERI		2	/* Sun ERI */
@@ -134,10 +167,10 @@ struct gem_softc {
 #define	GEM_APPLE_K2_GMAC	4	/* Apple K2 GMAC */
 
 #define	GEM_IS_APPLE(sc)						\
-	((sc)->sc_variant == GEM_APPLE_GMAC ||				\
-	(sc)->sc_variant == GEM_APPLE_K2_GMAC)
+	((sc)->gem_variant == GEM_APPLE_GMAC ||				\
+	(sc)->gem_variant == GEM_APPLE_K2_GMAC)
 
-	u_int		sc_flags;
+	u_int		gem_flags;
 #define	GEM_INITED	(1 << 0)	/* reset persistent regs init'ed */
 #define	GEM_LINK	(1 << 1)	/* link is up */
 #define	GEM_PCI		(1 << 2)	/* PCI busses are little-endian */
@@ -147,47 +180,51 @@ struct gem_softc {
 	/*
 	 * ring buffer DMA stuff
 	 */
-	bus_dmamap_t	sc_cddmamap;	/* control data DMA map */
-	bus_addr_t	sc_cddma;
+	bus_dmamap_t	gem_cddmamap;	/* control data DMA map */
+	bus_addr_t	gem_cddma;
 
 	/*
 	 * software state for transmit and receive descriptors
 	 */
-	struct gem_txsoft sc_txsoft[GEM_TXQUEUELEN];
-	struct gem_rxsoft sc_rxsoft[GEM_NRXDESC];
+	struct gem_txsoft gem_txsoft[GEM_TXQUEUELEN];
+	struct gem_rxsoft gem_rxsoft[GEM_NRXDESC];
 
 	/*
 	 * control data structures
 	 */
-	struct gem_control_data *sc_control_data;
-#define	sc_txdescs	sc_control_data->gcd_txdescs
-#define	sc_rxdescs	sc_control_data->gcd_rxdescs
+	struct gem_control_data *gem_control_data;
+#define	gem_txdescs	gem_control_data->gcd_txdescs
+#define	gem_rxdescs	gem_control_data->gcd_rxdescs
 
-	u_int		sc_txfree;	/* number of free TX descriptors */
-	u_int		sc_txnext;	/* next ready TX descriptor */
-	u_int		sc_txwin;	/* TX desc. since last TX intr. */
+	u_int		gem_txfree;	/* number of free TX descriptors */
+	u_int		gem_txnext;	/* next ready TX descriptor */
+	u_int		gem_txwin;	/* TX desc. since last TX intr. */
 
-	struct gem_txsq	sc_txfreeq;	/* free TX descsofts */
-	struct gem_txsq	sc_txdirtyq;	/* dirty TX descsofts */
+	struct gem_txsq	gem_txfreeq;	/* free TX descsofts */
+	struct gem_txsq	gem_txdirtyq;	/* dirty TX descsofts */
 
-	u_int		sc_rxptr;	/* next ready RX descriptor/state */
-	u_int		sc_rxfifosize;	/* RX FIFO size (bytes) */
+	u_int		gem_rxptr;	/* next ready RX descriptor/state */
+	u_int		gem_rxfifosize;	/* RX FIFO size (bytes) */
 
-	uint32_t	sc_mac_rxcfg;	/* RX MAC conf. % GEM_MAC_RX_ENABLE */
+	uint32_t	gem_mac_rxcfg;	/* RX MAC conf. % GEM_MAC_RX_ENABLE */
 
-	int		sc_ifflags;
-	u_long		sc_csum_features;
+	int		gem_ifflags;
+	u_long		gem_csum_features;
+#ifdef NETGRAPH
+	node_p 	gem_tap_node;
+	hook_p 	gem_tap_hook;
+#endif /* NETGRAPH */	
 };
 
 #define	GEM_BANKN_BARRIER(n, sc, offs, len, flags)			\
-	bus_barrier((sc)->sc_res[(n)], (offs), (len), (flags))
+	bus_barrier((sc)->gem_res[(n)], (offs), (len), (flags))
 #define	GEM_BANK1_BARRIER(sc, offs, len, flags)				\
 	GEM_BANKN_BARRIER(GEM_RES_BANK1, (sc), (offs), (len), (flags))
 #define	GEM_BANK2_BARRIER(sc, offs, len, flags)				\
 	GEM_BANKN_BARRIER(GEM_RES_BANK2, (sc), (offs), (len), (flags))
 
 #define	GEM_BANKN_READ_M(n, m, sc, offs)				\
-	bus_read_ ## m((sc)->sc_res[(n)], (offs))
+	bus_read_ ## m((sc)->gem_res[(n)], (offs))
 #define	GEM_BANK1_READ_1(sc, offs)					\
 	GEM_BANKN_READ_M(GEM_RES_BANK1, 1, (sc), (offs))
 #define	GEM_BANK1_READ_2(sc, offs)					\
@@ -202,7 +239,7 @@ struct gem_softc {
 	GEM_BANKN_READ_M(GEM_RES_BANK2, 4, (sc), (offs))
 
 #define	GEM_BANKN_WRITE_M(n, m, sc, offs, v)				\
-	bus_write_ ## m((sc)->sc_res[n], (offs), (v))
+	bus_write_ ## m((sc)->gem_res[n], (offs), (v))
 #define	GEM_BANK1_WRITE_1(sc, offs, v)					\
 	GEM_BANKN_WRITE_M(GEM_RES_BANK1, 1, (sc), (offs), (v))
 #define	GEM_BANK1_WRITE_2(sc, offs, v)					\
@@ -218,20 +255,20 @@ struct gem_softc {
 
 /* XXX this should be handled by bus_dma(9). */
 #define	GEM_DMA_READ(sc, v)						\
-	((((sc)->sc_flags & GEM_PCI) != 0) ? le64toh(v) : be64toh(v))
+	((((sc)->gem_flags & GEM_PCI) != 0) ? le64toh(v) : be64toh(v))
 #define	GEM_DMA_WRITE(sc, v)						\
-	((((sc)->sc_flags & GEM_PCI) != 0) ? htole64(v) : htobe64(v))
+	((((sc)->gem_flags & GEM_PCI) != 0) ? htole64(v) : htobe64(v))
 
-#define	GEM_CDTXADDR(sc, x)	((sc)->sc_cddma + GEM_CDTXOFF((x)))
-#define	GEM_CDRXADDR(sc, x)	((sc)->sc_cddma + GEM_CDRXOFF((x)))
+#define	GEM_CDTXADDR(sc, x)	((sc)->gem_cddma + GEM_CDTXOFF((x)))
+#define	GEM_CDRXADDR(sc, x)	((sc)->gem_cddma + GEM_CDRXOFF((x)))
 
 #define	GEM_CDSYNC(sc, ops)						\
-	bus_dmamap_sync((sc)->sc_cdmatag, (sc)->sc_cddmamap, (ops));
+	bus_dmamap_sync((sc)->gem_cdmatag, (sc)->gem_cddmamap, (ops));
 
 #define	GEM_INIT_RXDESC(sc, x)						\
 do {									\
-	struct gem_rxsoft *__rxs = &sc->sc_rxsoft[(x)];			\
-	struct gem_desc *__rxd = &sc->sc_rxdescs[(x)];			\
+	struct gem_rxsoft *__rxs = &sc->gem_rxsoft[(x)];			\
+	struct gem_desc *__rxd = &sc->gem_rxdescs[(x)];			\
 	struct mbuf *__m = __rxs->rxs_mbuf;				\
 									\
 	__m->m_data = __m->m_ext.ext_buf;				\
@@ -244,8 +281,8 @@ do {									\
 
 #define	GEM_UPDATE_RXDESC(sc, x)					\
 do {									\
-	struct gem_rxsoft *__rxs = &sc->sc_rxsoft[(x)];			\
-	struct gem_desc *__rxd = &sc->sc_rxdescs[(x)];			\
+	struct gem_rxsoft *__rxs = &sc->gem_rxsoft[(x)];			\
+	struct gem_desc *__rxd = &sc->gem_rxdescs[(x)];			\
 	struct mbuf *__m = __rxs->rxs_mbuf;				\
 									\
 	__rxd->gd_flags = GEM_DMA_WRITE((sc),				\
@@ -254,11 +291,11 @@ do {									\
 } while (0)
 
 #define	GEM_LOCK_INIT(_sc, _name)					\
-	mtx_init(&(_sc)->sc_mtx, _name, MTX_NETWORK_LOCK, MTX_DEF)
-#define	GEM_LOCK(_sc)			mtx_lock(&(_sc)->sc_mtx)
-#define	GEM_UNLOCK(_sc)			mtx_unlock(&(_sc)->sc_mtx)
-#define	GEM_LOCK_ASSERT(_sc, _what)	mtx_assert(&(_sc)->sc_mtx, (_what))
-#define	GEM_LOCK_DESTROY(_sc)		mtx_destroy(&(_sc)->sc_mtx)
+	mtx_init(&(_sc)->gem_mtx, _name, MTX_NETWORK_LOCK, MTX_DEF)
+#define	GEM_LOCK(_sc)			mtx_lock(&(_sc)->gem_mtx)
+#define	GEM_UNLOCK(_sc)			mtx_unlock(&(_sc)->gem_mtx)
+#define	GEM_LOCK_ASSERT(_sc, _what)	mtx_assert(&(_sc)->gem_mtx, (_what))
+#define	GEM_LOCK_DESTROY(_sc)		mtx_destroy(&(_sc)->gem_mtx)
 
 #ifdef _KERNEL
 extern devclass_t gem_devclass;
