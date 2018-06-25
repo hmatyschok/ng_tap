@@ -402,8 +402,8 @@ hme_config(struct hme_softc *sc)
 	ifp->if_capenable |= IFCAP_VLAN_MTU | IFCAP_HWCSUM;
 	
 #ifdef NETGRAPH   
-	if ((error = ng_hme_tap_attach(sc)) != 0)
-		goto fail_txdesc;
+	if ((error = ng_hme_tap_attach(sc)) != 0) 
+		hme_detach(sc);
 #endif /* NETGRAPH */
 	
 	return (0);
@@ -928,9 +928,9 @@ hme_init_locked(struct hme_softc *sc)
 	v |= HME_MAC_RXCFG_ENABLE;
 #ifdef NETGRAPH
 	if (sc->hme_tap_hook != NULL)
-		v |= (HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
+		v |= HME_MAC_RXCFG_DCRCS;
 	else 
-		v &= ~(HME_MAC_RXCFG_DERR|HME_MAC_RXCFG_DCRCS);
+		v &= ~(HME_MAC_RXCFG_DCRCS);
 #else	
 	v &= ~(HME_MAC_RXCFG_DCRCS);
 #endif /* ! NETGRAPH */

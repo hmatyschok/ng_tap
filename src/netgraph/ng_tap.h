@@ -309,6 +309,8 @@ bad:                                                                  \
 	else                                                          \
 		atomic_subtract_int(&ng_##device##_tap_type.refs, 1); \
                                                                       \
+    sc->device##_tap_node = NULL;                                 \
+                                                                      \
 	goto out;                                                     \
 }
 
