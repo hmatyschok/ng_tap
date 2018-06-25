@@ -125,20 +125,20 @@ gem_sbus_attach(device_t dev)
 	uint32_t val;
 
 	sc = device_get_softc(dev);
-	sc->sc_variant = GEM_SUN_GEM;
-	sc->sc_dev = dev;
+	sc->gem_variant = GEM_SUN_GEM;
+	sc->gem_dev = dev;
 	/* All known SBus models use a SERDES. */
-	sc->sc_flags = GEM_SERDES;
+	sc->gem_flags = GEM_SERDES;
 
-	if (bus_alloc_resources(dev, gem_sbus_res_spec, sc->sc_res)) {
+	if (bus_alloc_resources(dev, gem_sbus_res_spec, sc->gem_res)) {
 		device_printf(dev, "failed to allocate resources\n");
-		bus_release_resources(dev, gem_sbus_res_spec, sc->sc_res);
+		bus_release_resources(dev, gem_sbus_res_spec, sc->gem_res);
 		return (ENXIO);
 	}
 
 	GEM_LOCK_INIT(sc, device_get_nameunit(dev));
 
-	OF_getetheraddr(dev, sc->sc_enaddr);
+	OF_getetheraddr(dev, sc->gem_enaddr);
 
 	burst = sbus_get_burstsz(dev);
 	val = GEM_SBUS_CFG_PARITY;
@@ -164,8 +164,8 @@ gem_sbus_attach(device_t dev)
 		goto fail;
 	}
 
-	if (bus_setup_intr(dev, sc->sc_res[GEM_RES_INTR], INTR_TYPE_NET |
-	    INTR_MPSAFE, NULL, gem_intr, sc, &sc->sc_ih) != 0) {
+	if (bus_setup_intr(dev, sc->gem_res[GEM_RES_INTR], INTR_TYPE_NET |
+	    INTR_MPSAFE, NULL, gem_intr, sc, &sc->gem_ih) != 0) {
 		device_printf(dev, "failed to set up interrupt\n");
 		gem_detach(sc);
 		goto fail;
@@ -174,7 +174,7 @@ gem_sbus_attach(device_t dev)
 
  fail:
 	GEM_LOCK_DESTROY(sc);
-	bus_release_resources(dev, gem_sbus_res_spec, sc->sc_res);
+	bus_release_resources(dev, gem_sbus_res_spec, sc->gem_res);
 	return (ENXIO);
 }
 
@@ -184,10 +184,10 @@ gem_sbus_detach(device_t dev)
 	struct gem_softc *sc;
 
 	sc = device_get_softc(dev);
-	bus_teardown_intr(dev, sc->sc_res[GEM_RES_INTR], sc->sc_ih);
+	bus_teardown_intr(dev, sc->gem_res[GEM_RES_INTR], sc->gem_ih);
 	gem_detach(sc);
 	GEM_LOCK_DESTROY(sc);
-	bus_release_resources(dev, gem_sbus_res_spec, sc->sc_res);
+	bus_release_resources(dev, gem_sbus_res_spec, sc->gem_res);
 	return (0);
 }
 

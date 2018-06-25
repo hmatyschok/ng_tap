@@ -152,14 +152,14 @@ gem_pci_attach(device_t dev)
 #endif
 
 	sc = device_get_softc(dev);
-	sc->sc_variant = GEM_UNKNOWN;
+	sc->gem_variant = GEM_UNKNOWN;
 	for (i = 0; gem_pci_devlist[i].gpd_desc != NULL; i++) {
 		if (pci_get_devid(dev) == gem_pci_devlist[i].gpd_devid) {
-			sc->sc_variant = gem_pci_devlist[i].gpd_variant;
+			sc->gem_variant = gem_pci_devlist[i].gpd_variant;
 			break;
 		}
 	}
-	if (sc->sc_variant == GEM_UNKNOWN) {
+	if (sc->gem_variant == GEM_UNKNOWN) {
 		device_printf(dev, "unknown adaptor\n");
 		return (ENXIO);
 	}
@@ -174,15 +174,15 @@ gem_pci_attach(device_t dev)
 		pci_set_intpin(dev, 1);
 
 	/* Set the PCI latency timer for Sun ERIs. */
-	if (sc->sc_variant == GEM_SUN_ERI)
+	if (sc->gem_variant == GEM_SUN_ERI)
 		pci_write_config(dev, PCIR_LATTIMER, GEM_ERI_LATENCY_TIMER, 1);
 
-	sc->sc_dev = dev;
-	sc->sc_flags |= GEM_PCI;
+	sc->gem_dev = dev;
+	sc->gem_flags |= GEM_PCI;
 
-	if (bus_alloc_resources(dev, gem_pci_res_spec, sc->sc_res)) {
+	if (bus_alloc_resources(dev, gem_pci_res_spec, sc->gem_res)) {
 		device_printf(dev, "failed to allocate resources\n");
-		bus_release_resources(dev, gem_pci_res_spec, sc->sc_res);
+		bus_release_resources(dev, gem_pci_res_spec, sc->gem_res);
 		return (ENXIO);
 	}
 
@@ -193,31 +193,31 @@ gem_pci_attach(device_t dev)
 	 * with the old way of using copies of the bus tag and handle in
 	 * the softc along with bus_space_*()...
 	 */
-	sc->sc_res[GEM_RES_BANK2] = malloc(sizeof(*sc->sc_res[GEM_RES_BANK2]),
+	sc->gem_res[GEM_RES_BANK2] = malloc(sizeof(*sc->gem_res[GEM_RES_BANK2]),
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (sc->sc_res[GEM_RES_BANK2] == NULL) {
+	if (sc->gem_res[GEM_RES_BANK2] == NULL) {
 		device_printf(dev, "failed to allocate bank2 resource\n");
 		goto fail;
 	}
-	rman_set_bustag(sc->sc_res[GEM_RES_BANK2],
-	    rman_get_bustag(sc->sc_res[GEM_RES_BANK1]));
-	bus_space_subregion(rman_get_bustag(sc->sc_res[GEM_RES_BANK1]),
-	    rman_get_bushandle(sc->sc_res[GEM_RES_BANK1]),
+	rman_set_bustag(sc->gem_res[GEM_RES_BANK2],
+	    rman_get_bustag(sc->gem_res[GEM_RES_BANK1]));
+	bus_space_subregion(rman_get_bustag(sc->gem_res[GEM_RES_BANK1]),
+	    rman_get_bushandle(sc->gem_res[GEM_RES_BANK1]),
 	    GEM_PCI_BANK2_OFFSET, GEM_PCI_BANK2_SIZE,
-	    &sc->sc_res[GEM_RES_BANK2]->r_bushandle);
+	    &sc->gem_res[GEM_RES_BANK2]->r_bushandle);
 
 	/* Determine whether we're running at 66MHz. */
 	if ((GEM_BANK2_READ_4(sc, GEM_PCI_BIF_CONFIG) &
 	   GEM_PCI_BIF_CNF_M66EN) != 0)
-		sc->sc_flags |= GEM_PCI66;
+		sc->gem_flags |= GEM_PCI66;
 
 #if defined(__powerpc__) || defined(__sparc64__)
-	OF_getetheraddr(dev, sc->sc_enaddr);
+	OF_getetheraddr(dev, sc->gem_enaddr);
 	if (OF_getprop(ofw_bus_get_node(dev), GEM_SHARED_PINS, buf,
 	    sizeof(buf)) > 0) {
 		buf[sizeof(buf) - 1] = '\0';
 		if (strcmp(buf, GEM_SHARED_PINS_SERDES) == 0)
-			sc->sc_flags |= GEM_SERDES;
+			sc->gem_flags |= GEM_SERDES;
 	}
 #else
 	/*
@@ -303,16 +303,16 @@ gem_pci_attach(device_t dev)
 		device_printf(dev, "unexpected PCI VPD\n");
 		goto fail;
 	}
-	bus_read_region_1(sc->sc_res[GEM_RES_BANK1],
+	bus_read_region_1(sc->gem_res[GEM_RES_BANK1],
 	    GEM_PCI_ROM_OFFSET + j + PCI_VPDRES_LARGE_SIZE + PCI_VPD_SIZE,
-	    sc->sc_enaddr, ETHER_ADDR_LEN);
+	    sc->gem_enaddr, ETHER_ADDR_LEN);
 #endif
 	/*
 	 * The Xserve G5 has a fake GMAC with an all-zero MAC address.
 	 * Check for this, and don't attach in this case.
 	 */
 
-	for (i = 0; i < ETHER_ADDR_LEN && sc->sc_enaddr[i] == 0; i++) {}
+	for (i = 0; i < ETHER_ADDR_LEN && sc->gem_enaddr[i] == 0; i++) {}
 	if (i == ETHER_ADDR_LEN) {
 		device_printf(dev, "invalid MAC address\n");
 		goto fail;
@@ -323,8 +323,8 @@ gem_pci_attach(device_t dev)
 		goto fail;
 	}
 
-	if (bus_setup_intr(dev, sc->sc_res[GEM_RES_INTR], INTR_TYPE_NET |
-	    INTR_MPSAFE, NULL, gem_intr, sc, &sc->sc_ih) != 0) {
+	if (bus_setup_intr(dev, sc->gem_res[GEM_RES_INTR], INTR_TYPE_NET |
+	    INTR_MPSAFE, NULL, gem_intr, sc, &sc->gem_ih) != 0) {
 		device_printf(dev, "failed to set up interrupt\n");
 		gem_detach(sc);
 		goto fail;
@@ -332,10 +332,10 @@ gem_pci_attach(device_t dev)
 	return (0);
 
  fail:
-	if (sc->sc_res[GEM_RES_BANK2] != NULL)
-		free(sc->sc_res[GEM_RES_BANK2], M_DEVBUF);
+	if (sc->gem_res[GEM_RES_BANK2] != NULL)
+		free(sc->gem_res[GEM_RES_BANK2], M_DEVBUF);
 	GEM_LOCK_DESTROY(sc);
-	bus_release_resources(dev, gem_pci_res_spec, sc->sc_res);
+	bus_release_resources(dev, gem_pci_res_spec, sc->gem_res);
 	return (ENXIO);
 }
 
@@ -345,11 +345,11 @@ gem_pci_detach(device_t dev)
 	struct gem_softc *sc;
 
 	sc = device_get_softc(dev);
-	bus_teardown_intr(dev, sc->sc_res[GEM_RES_INTR], sc->sc_ih);
+	bus_teardown_intr(dev, sc->gem_res[GEM_RES_INTR], sc->gem_ih);
 	gem_detach(sc);
-	free(sc->sc_res[GEM_RES_BANK2], M_DEVBUF);
+	free(sc->gem_res[GEM_RES_BANK2], M_DEVBUF);
 	GEM_LOCK_DESTROY(sc);
-	bus_release_resources(dev, gem_pci_res_spec, sc->sc_res);
+	bus_release_resources(dev, gem_pci_res_spec, sc->gem_res);
 	return (0);
 }
 
