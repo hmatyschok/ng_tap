@@ -1737,10 +1737,12 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 	 * enabled.
 	 */
 #ifdef NETGRAPH
-	if (sc->hme_tap_hook != NULL)
-		v |= HME_MAC_RXCFG_DCRCS;
-	else 
-		v &= ~(HME_MAC_RXCFG_DCRCS);
+	if (reenable) {
+		if (sc->hme_tap_hook != NULL)
+			macc |= HME_MAC_RXCFG_DCRCS;
+		else 
+			macc &= ~(HME_MAC_RXCFG_DCRCS);
+	}
 #endif /* NETGRAPH */		
 	macc &= ~(HME_MAC_RXCFG_PGRP | HME_MAC_RXCFG_PMISC);
 
