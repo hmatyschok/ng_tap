@@ -151,7 +151,7 @@ static void	gem_rint_timeout(void *arg);
 #endif
 static inline void gem_rxcksum(struct mbuf *m, uint64_t flags);
 static void	gem_rxdrain(struct gem_softc *sc);
-static void	gem_setladrf(struct gem_softc *sc);
+static void	gem_setladrf(struct gem_softc *sc, int pswitch);
 static void	gem_start(struct ifnet *ifp);
 static void	gem_start_locked(struct ifnet *ifp);
 static void	gem_stop(struct ifnet *ifp, int disable);
@@ -823,7 +823,7 @@ gem_reset_rxdma(struct gem_softc *sc)
 	 * Clear the RX filter and reprogram it.  This will also set the
 	 * current RX MAC configuration and enable it.
 	 */
-	gem_setladrf(sc);
+	gem_setladrf(sc, 1);
 }
 
 static int
@@ -1119,7 +1119,7 @@ gem_init_locked(struct gem_softc *sc)
 	 * Clear the RX filter and reprogram it.  This will also set the
 	 * current RX MAC configuration and enable it.
 	 */
-	gem_setladrf(sc);
+	gem_setladrf(sc, 0);
 
 	/* step 13.  TX_MAC Configuration Register */
 	v = GEM_BANK1_READ_4(sc, GEM_MAC_TX_CONFIG);
@@ -2212,7 +2212,7 @@ gem_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0 &&
 			    ((ifp->if_flags ^ sc->gem_ifflags) &
 			    (IFF_ALLMULTI | IFF_PROMISC)) != 0)
-				gem_setladrf(sc);
+				gem_setladrf(sc, 1);
 			else
 				gem_init_locked(sc);
 		} else if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
@@ -2230,7 +2230,7 @@ gem_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCDELMULTI:
 		GEM_LOCK(sc);
 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
-			gem_setladrf(sc);
+			gem_setladrf(sc, 1);
 		GEM_UNLOCK(sc);
 		break;
 	case SIOCGIFMEDIA:
@@ -2255,7 +2255,7 @@ gem_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 }
 
 static void
-gem_setladrf(struct gem_softc *sc)
+gem_setladrf(struct gem_softc *sc, int pswitch)
 {
 	struct ifnet *ifp = sc->gem_ifp;
 	struct ifmultiaddr *inm;
@@ -2279,10 +2279,12 @@ gem_setladrf(struct gem_softc *sc)
 		    "cannot disable RX MAC or hash filter\n");
 	v &= ~(GEM_MAC_RX_PROMISCUOUS | GEM_MAC_RX_PROMISC_GRP);
 #ifdef NETGRAPH
-	if (sc->gem_tap_hook != NULL)
-		v &= ~GEM_MAC_RX_STRIP_CRC;
-	else
-		v |= GEM_MAC_RX_STRIP_CRC;	
+	if (pswitch != 0) {
+		if (sc->gem_tap_hook != NULL)
+			v &= ~GEM_MAC_RX_STRIP_CRC;
+		else
+			v |= GEM_MAC_RX_STRIP_CRC;	
+	}
 #endif /* NETGRAPH */
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		v |= GEM_MAC_RX_PROMISCUOUS;	
