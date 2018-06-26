@@ -345,7 +345,7 @@ static int msk_miibus_readreg(device_t, int, int);
 static int msk_miibus_writereg(device_t, int, int, int);
 static void msk_miibus_statchg(device_t);
 
-static void msk_rxfilter(struct msk_if_softc *);
+static void msk_rxfilter(struct msk_if_softc *, int);
 static void msk_setvlan(struct msk_if_softc *, struct ifnet *);
 
 static void msk_stats_clear(struct msk_if_softc *);
@@ -601,7 +601,7 @@ msk_miibus_statchg(device_t dev)
 }
 
 static void
-msk_rxfilter(struct msk_if_softc *sc_if)
+msk_rxfilter(struct msk_if_softc *sc_if, int pswitch)
 {
 	struct msk_softc *sc;
 	struct ifnet *ifp;
@@ -618,13 +618,15 @@ msk_rxfilter(struct msk_if_softc *sc_if)
 
 	bzero(mchash, sizeof(mchash));
 	mode = GMAC_READ_2(sc, sc_if->msk_port, GM_RX_CTRL);
-	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 #ifdef NETGRAPH	
+	if (pswitch != 0) {
 		if (sc_if->msk_tap_hook != NULL) 
 			mode &= ~(GM_RXCR_CRC_DIS);
 		else
-			mode |= GM_RXCR_CRC_DIS;
-#endif /* NETGRAPH */
+			mode |= GM_RXCR_CRC_DIS;		
+	}
+#endif /* NETGRAPH */	
+	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		mode &= ~(GM_RXCR_UCF_ENA | GM_RXCR_MCF_ENA);
 	} else if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
 		mode |= GM_RXCR_UCF_ENA | GM_RXCR_MCF_ENA;
@@ -1132,7 +1134,7 @@ msk_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0 &&
 			    ((ifp->if_flags ^ sc_if->msk_if_flags) &
 			    (IFF_PROMISC | IFF_ALLMULTI)) != 0)
-				msk_rxfilter(sc_if);
+				msk_rxfilter(sc_if, 1);
 			else if ((sc_if->msk_flags & MSK_FLAG_DETACH) == 0)
 				msk_init_locked(sc_if);
 		} else if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
@@ -1144,7 +1146,7 @@ msk_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	case SIOCDELMULTI:
 		MSK_IF_LOCK(sc_if);
 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
-			msk_rxfilter(sc_if);
+			msk_rxfilter(sc_if, 1);
 		MSK_IF_UNLOCK(sc_if);
 		break;
 	case SIOCGIFMEDIA:
@@ -4024,7 +4026,7 @@ msk_init_locked(struct msk_if_softc *sc_if)
 	CSR_WRITE_4(sc, MR_ADDR(sc_if->msk_port, RX_GMF_CTRL_T), reg);
 
 	/* Set receive filter. */
-	msk_rxfilter(sc_if);
+	msk_rxfilter(sc_if, 0);
 
 	if (sc->msk_hw_id == CHIP_ID_YUKON_XL) {
 		/* Clear flush mask - HW bug. */
