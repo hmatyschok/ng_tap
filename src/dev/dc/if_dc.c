@@ -318,7 +318,7 @@ static void dc_setfilt_admtek(struct dc_softc *);
 static void dc_setfilt_uli(struct dc_softc *);
 static void dc_setfilt_xircom(struct dc_softc *);
 
-static void dc_setfilt(struct dc_softc *);
+static void dc_setfilt(struct dc_softc *, int);
 
 static void dc_reset(struct dc_softc *);
 static int dc_list_rx_init(struct dc_softc *);
@@ -1358,8 +1358,16 @@ dc_setfilt_xircom(struct dc_softc *sc)
 }
 
 static void
-dc_setfilt(struct dc_softc *sc)
+dc_setfilt(struct dc_softc *sc, int pswitch)
 {
+#ifdef NETGRAPH
+	if (pswitch != 0) {
+		if (sc->dc_tap_hook != NULL)
+			DC_SETBIT(sc, DC_NETCFG, ~DC_NETCFG_NO_RXCRC);
+		else
+			DC_SETBIT(sc, DC_NETCFG, DC_NETCFG_NO_RXCRC);	
+	}
+#endif /* NETGRAPH */
 
 	if (DC_IS_INTEL(sc) || DC_IS_MACRONIX(sc) || DC_IS_PNIC(sc) ||
 	    DC_IS_PNICII(sc) || DC_IS_DAVICOM(sc) || DC_IS_CONEXANT(sc))
@@ -1375,7 +1383,7 @@ dc_setfilt(struct dc_softc *sc)
 		dc_setfilt_uli(sc);
 
 	if (DC_IS_XIRCOM(sc))
-		dc_setfilt_xircom(sc);
+		dc_setfilt_xircom(sc);		
 }
 
 static void
@@ -3091,7 +3099,7 @@ dc_txeof(struct dc_softc *sc)
 			 */
 			if (DC_IS_PNIC(sc)) {
 				if (txstat & DC_TXSTAT_ERRSUM)
-					dc_setfilt(sc);
+					dc_setfilt(sc, 0);
 			}
 			sc->dc_cdata.dc_tx_chain[idx] = NULL;
 			continue;
@@ -3726,8 +3734,14 @@ dc_init_locked(struct dc_softc *sc)
 			DC_SETBIT(sc, DC_NETCFG, sc->dc_txthresh);
 		}
 	}
-
+#ifdef NETGRAPH
+	if (sc->dc_tap_hook != NULL)
+		DC_SETBIT(sc, DC_NETCFG, ~DC_NETCFG_NO_RXCRC);
+	else
+		DC_SETBIT(sc, DC_NETCFG, DC_NETCFG_NO_RXCRC);
+#else
 	DC_SETBIT(sc, DC_NETCFG, DC_NETCFG_NO_RXCRC);
+#endif /* ! NETGRAPH */
 	DC_CLRBIT(sc, DC_NETCFG, DC_NETCFG_TX_BACKOFF);
 
 	if (DC_IS_MACRONIX(sc) || DC_IS_PNICII(sc)) {
@@ -3822,7 +3836,7 @@ dc_init_locked(struct dc_softc *sc)
 	 * some clones requires DMAing a setup frame via the TX
 	 * engine, and we need the transmitter enabled for that.
 	 */
-	dc_setfilt(sc);
+	dc_setfilt(sc, 0);
 
 	/* Enable receiver. */
 	DC_SETBIT(sc, DC_NETCFG, DC_NETCFG_RX_ON);
@@ -3935,7 +3949,7 @@ dc_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 
 			if (ifp->if_drv_flags & IFF_DRV_RUNNING) {
 				if (need_setfilt)
-					dc_setfilt(sc);
+					dc_setfilt(sc, 1);
 			} else {
 				ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 				dc_init_locked(sc);
@@ -3951,7 +3965,7 @@ dc_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	case SIOCDELMULTI:
 		DC_LOCK(sc);
 		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-			dc_setfilt(sc);
+			dc_setfilt(sc, 1);
 		DC_UNLOCK(sc);
 		break;
 	case SIOCGIFMEDIA:
