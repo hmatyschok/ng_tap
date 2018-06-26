@@ -28,7 +28,32 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
 /*
  * Device driver for the Sundance Tech. TC9021 10/100/1000
  * Ethernet controller.
@@ -75,6 +100,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/stge/if_stge.c 298307 2016-04-19 23:37:2
 #include <dev/pci/pcivar.h>
 
 #include <dev/stge/if_stgereg.h>
+#ifdef NETGRAPH
+#include <dev/stge/ng_stge_tap.h>
+NG_TAP_MODULE(stge, stge_softc, NG_STGE_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 #define	STGE_CSUM_FEATURES	(CSUM_IP | CSUM_TCP | CSUM_UDP)
 
@@ -148,8 +177,8 @@ static int	stge_eeprom_wait(struct stge_softc *);
 static void	stge_read_eeprom(struct stge_softc *, int, uint16_t *);
 static void	stge_tick(void *);
 static void	stge_stats_update(struct stge_softc *);
-static void	stge_set_filter(struct stge_softc *);
-static void	stge_set_multi(struct stge_softc *);
+static void	stge_set_filter(struct stge_softc *, int);
+static void	stge_set_multi(struct stge_softc *, int);
 
 static void	stge_link_task(void *, int);
 static void	stge_intr(void *);
@@ -642,6 +671,10 @@ stge_attach(device_t dev)
 	 */
 	error = bus_setup_intr(dev, sc->stge_res[1], INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, stge_intr, sc, &sc->stge_ih);
+#ifdef NETGRAPH
+	if (error == 0)
+		error = ng_stge_tap_attach(sc);
+#endif /* NETGRAPH */	    
 	if (error != 0) {
 		ether_ifdetach(ifp);
 		device_printf(sc->stge_dev, "couldn't set up IRQ\n");
@@ -670,6 +703,9 @@ stge_detach(device_t dev)
 		ether_poll_deregister(ifp);
 #endif
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_stge_tap_detach(sc);
+#endif /* NETGRAPH */		
 		STGE_LOCK(sc);
 		/* XXX */
 		sc->stge_detach = 1;
@@ -1278,7 +1314,7 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
 				if (((ifp->if_flags ^ sc->stge_if_flags)
 				    & IFF_PROMISC) != 0)
-					stge_set_filter(sc);
+					stge_set_filter(sc, 1);
 			} else {
 				if (sc->stge_detach == 0)
 					stge_init_locked(sc);
@@ -1294,7 +1330,7 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCDELMULTI:
 		STGE_LOCK(sc);
 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
-			stge_set_multi(sc);
+			stge_set_multi(sc, 1);
 		STGE_UNLOCK(sc);
 		break;
 	case SIOCSIFMEDIA:
@@ -1672,12 +1708,32 @@ stge_rxeof(struct stge_softc *sc)
 		    (RFD_RxFIFOOverrun | RFD_RxRuntFrame |
 		    RFD_RxAlignmentError | RFD_RxFCSError |
 		    RFD_RxLengthError)) != 0) {
+#ifdef NETGRAPH
+			if (sc->stge_tap_hook != NULL) {
+				if ((status & RFD_RxFCSError) == 0) {
+					stge_discard_rxbuf(sc, cons);
+					if (sc->stge_cdata.stge_rxhead != NULL) {
+						m_freem(sc->stge_cdata.stge_rxhead);
+						STGE_RXCHAIN_RESET(sc);
+					}
+					continue;
+				}
+			} else {
+				stge_discard_rxbuf(sc, cons);
+				if (sc->stge_cdata.stge_rxhead != NULL) {
+					m_freem(sc->stge_cdata.stge_rxhead);
+					STGE_RXCHAIN_RESET(sc);
+				}
+				continue;
+			}
+#else				
 			stge_discard_rxbuf(sc, cons);
 			if (sc->stge_cdata.stge_rxhead != NULL) {
 				m_freem(sc->stge_cdata.stge_rxhead);
 				STGE_RXCHAIN_RESET(sc);
 			}
 			continue;
+#endif /* ! NETGRAPH */
 		}
 		/*
 		 * Add a new receive buffer to the ring.
@@ -1756,7 +1812,11 @@ stge_rxeof(struct stge_softc *sc)
 
 			STGE_UNLOCK(sc);
 			/* Pass it on. */
+#ifdef NETGRAPH
+			NG_TAP_INPUT(stge, sc, ifp, m);
+#else			
 			(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 			STGE_LOCK(sc);
 			rx_npkts++;
 
@@ -2031,9 +2091,9 @@ stge_init_locked(struct stge_softc *sc)
 	    (1U << 21));
 
 	/* Set up the receive filter. */
-	stge_set_filter(sc);
+	stge_set_filter(sc, 0);
 	/* Program multicast filter. */
-	stge_set_multi(sc);
+	stge_set_multi(sc, 1);
 
 	/*
 	 * Give the transmit and receive ring to the chip.
@@ -2482,10 +2542,13 @@ stge_newbuf(struct stge_softc *sc, int idx)
  *	Set up the receive filter.
  */
 static void
-stge_set_filter(struct stge_softc *sc)
+stge_set_filter(struct stge_softc *sc, int pswitch)
 {
 	struct ifnet *ifp;
 	uint16_t mode;
+#ifdef NETGRAPH 
+	uint32_t v;
+#endif /* NETGRAPH */
 
 	STGE_LOCK_ASSERT(sc);
 
@@ -2503,10 +2566,22 @@ stge_set_filter(struct stge_softc *sc)
 		mode &= ~RM_ReceiveAllFrames;
 
 	CSR_WRITE_2(sc, STGE_ReceiveMode, mode);
+#ifdef NETGRAPH
+	if (pswitch != 0) {
+		v = CSR_READ_4(sc, STGE_MACCtrl) & MC_MASK;
+
+		if (sc->stge_tap_hook != NULL)
+			v |= MC_RcvFCS;
+		else
+			v &= ~MC_RcvFCS;
+
+		CSR_WRITE_4(sc, STGE_MACCtrl, v);
+	}
+#endif /* NETGRAPH */	
 }
 
 static void
-stge_set_multi(struct stge_softc *sc)
+stge_set_multi(struct stge_softc *sc, int pswitch)
 {
 	struct ifnet *ifp;
 	struct ifmultiaddr *ifma;
@@ -2514,6 +2589,9 @@ stge_set_multi(struct stge_softc *sc)
 	uint32_t mchash[2];
 	uint16_t mode;
 	int count;
+#ifdef NETGRAPH
+	uint32_t v;
+#endif /* NETGRAPH */	
 
 	STGE_LOCK_ASSERT(sc);
 
@@ -2569,6 +2647,18 @@ stge_set_multi(struct stge_softc *sc)
 	CSR_WRITE_4(sc, STGE_HashTable0, mchash[0]);
 	CSR_WRITE_4(sc, STGE_HashTable1, mchash[1]);
 	CSR_WRITE_2(sc, STGE_ReceiveMode, mode);
+#ifdef NETGRAPH	
+	if (pswitch != 0) {
+		v = CSR_READ_4(sc, STGE_MACCtrl) & MC_MASK;
+
+		if (sc->stge_tap_hook != NULL)
+			v |= MC_RcvFCS;
+		else
+			v &= ~MC_RcvFCS;
+
+		CSR_WRITE_4(sc, STGE_MACCtrl, v);
+	}
+#endif /* NETGRAPH */		
 }
 
 static int
