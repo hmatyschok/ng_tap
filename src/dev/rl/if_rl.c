@@ -550,16 +550,17 @@ rl_rxfilter(struct rl_softc *sc)
 	RL_LOCK_ASSERT(sc);
 
 	rxfilt = CSR_READ_4(sc, RL_RXCFG);
-#ifdef NETGRAPH
-	rxfilt &= ~(RL_RXCFG_RX_ALLPHYS 
-		| RL_RXCFG_RX_BROAD 
-		| RL_RXCFG_RX_MULTI
-		| RL_RXCFG_RX_ERRPKT);
-#else 
 	rxfilt &= ~(RL_RXCFG_RX_ALLPHYS 
 		| RL_RXCFG_RX_BROAD 
 		| RL_RXCFG_RX_MULTI);
-#endif /* ! NETGRAPH */
+
+#ifdef NETGRAPH
+		if (sc->rl_tap_hook != NULL)
+			rxfilt |= RL_RXCFG_RX_ERRPKT;
+		else
+			rxfilt &= ~RL_RXCFG_RX_ERRPKT;
+#endif /* NETGRAPH */
+
 	/* Always accept frames destined for this host. */
 	rxfilt |= RL_RXCFG_RX_INDIV;
 	/* Set capture broadcast bit to capture broadcast frames. */
@@ -569,10 +570,6 @@ rl_rxfilter(struct rl_softc *sc)
 		rxfilt |= RL_RXCFG_RX_MULTI;
 		if (ifp->if_flags & IFF_PROMISC) {
 			rxfilt |= RL_RXCFG_RX_ALLPHYS;
-#ifdef NETGRAPH
-			if (sc->rl_tap_hook != NULL)
-				rxfilt |= RL_RXCFG_RX_ERRPKT;
-#endif /* NETGRAPH */
 		}
 		hashes[0] = 0xFFFFFFFF;
 		hashes[1] = 0xFFFFFFFF;
@@ -889,9 +886,12 @@ rl_attach(device_t dev)
 		device_printf(sc->rl_dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
 	}
-#ifdef NETGRAPH
-	if (error == 0)
-		ng_rl_tap_attach(sc);
+	
+#ifdef NETGRAPH  
+	if ((error = ng_rl_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_rl_tap(4) \n");
+		ether_ifdetach(ifp);
+	}
 #endif /* NETGRAPH */
 
 fail:

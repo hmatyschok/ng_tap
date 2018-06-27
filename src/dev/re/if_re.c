@@ -686,7 +686,16 @@ re_set_rxmode(struct rl_softc *sc)
 
 	ifp = sc->rl_ifp;
 
-	rxfilt = RL_RXCFG_CONFIG | RL_RXCFG_RX_INDIV | RL_RXCFG_RX_BROAD;
+	rxfilt = RL_RXCFG_CONFIG 
+		| RL_RXCFG_RX_INDIV 
+		| RL_RXCFG_RX_BROAD;
+
+#ifdef NETGRAPH
+		if (sc->rl_tap_hook != NULL)
+			rxfilt |= RL_RXCFG_RX_ERRPKT;
+		else
+			rxfilt &= ~RL_RXCFG_RX_ERRPKT;
+#endif /* NETGRAPH */	
 
 	if ((sc->rl_flags & RL_FLAG_EARLYOFF) != 0)
 		rxfilt |= RL_RXCFG_EARLYOFF;
@@ -695,11 +704,7 @@ re_set_rxmode(struct rl_softc *sc)
 
 	if (ifp->if_flags & (IFF_ALLMULTI | IFF_PROMISC)) {
 		if (ifp->if_flags & IFF_PROMISC) {
-			rxfilt |= RL_RXCFG_RX_ALLPHYS;
-#ifdef NETGRAPH
-			if (sc->rl_tap_hook != NULL)
-				rxfilt |= RL_RXCFG_RX_ERRPKT;
-#endif /* NETGRAPH */				
+			rxfilt |= RL_RXCFG_RX_ALLPHYS;			
 		}
 		/*
 		 * Unlike other hardwares, we have to explicitly set
@@ -1764,14 +1769,20 @@ re_attach(device_t dev)
 		    INTR_TYPE_NET | INTR_MPSAFE, re_intr, NULL, sc,
 		    &sc->rl_intrhand[0]);
 	}
+	
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
+		goto fail;
 	}
+	
 #ifdef NETGRAPH  
-	if (error == 0) 
-		error = ng_rl_tap_attach(sc);
+	if ((error = ng_rl_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_re_tap(4) \n");
+		ether_ifdetach(ifp);
+	}
 #endif /* NETGRAPH */
+
 fail:
 	if (error)
 		re_detach(dev);
