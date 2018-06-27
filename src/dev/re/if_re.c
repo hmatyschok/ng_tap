@@ -2301,10 +2301,6 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 				rxerr = 0;
 			if (rxerr != 0) {
 				if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-				/*
-				 * If this is part of a multi-fragment packet,
-				 * discard all the pieces.
-				 */
 #ifdef NETGRAPH
 				if (sc->rl_tap_hook != NULL) {
 					if ((rxstat & RL_RDESC_STAT_CRCERR) != 0)
@@ -2313,6 +2309,9 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 
 				if (rxerr != 0) {
 					if (sc->rl_head != NULL) {
+/*
+ * If this is part of a multi-fragment packet, discard all the pieces.
+ */
 						m_freem(sc->rl_head);
 						sc->rl_head = sc->rl_tail = NULL;
 					}
@@ -2329,15 +2328,14 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 #endif /* ! NETGRAPH */
 			}
 		}
-
-		/*
-		 * If allocating a replacement mbuf fails,
-		 * reload the current one.
-		 */
+/*
+ * If allocating a replacement mbuf fails, reload the current one.
+ */
 		if (jumbo != 0)
 			rxerr = re_jumbo_newbuf(sc, i);
 		else
 			rxerr = re_newbuf(sc, i);
+
 		if (rxerr != 0) {
 			if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
 			if (sc->rl_head != NULL) {
