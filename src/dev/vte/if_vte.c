@@ -514,16 +514,18 @@ vte_attach(device_t dev)
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
 	error = bus_setup_intr(dev, sc->vte_irq, INTR_TYPE_NET | INTR_MPSAFE,
-	    NULL, vte_intr, sc, &sc->vte_intrhand);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_vte_tap_attach(sc);
-#endif /* NETGRAPH */	    
+	    NULL, vte_intr, sc, &sc->vte_intrhand);	    
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH	    
+	if ((error = ng_vte_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set ng_vte_tap(4).\n");
+		ether_ifdetach(ifp);
+	}
+#endif /* NETGRAPH */
 
 fail:
 	if (error != 0)
@@ -1533,20 +1535,21 @@ vte_rxeof(struct vte_softc *sc)
 	struct ifnet *ifp;
 	struct vte_rxdesc *rxd;
 	struct mbuf *m;
-	uint16_t status, total_len;
+	uint16_t status, total_len;	
+	int cons, prog;
 #ifdef NETGRAPH
 	int ether_crc_len;
-#endif /* NETGRAPH */	
-	int cons, prog;
-
+#endif /* NETGRAPH */
 	bus_dmamap_sync(sc->vte_cdata.vte_rx_ring_tag,
 	    sc->vte_cdata.vte_rx_ring_map, BUS_DMASYNC_POSTREAD |
 	    BUS_DMASYNC_POSTWRITE);
+
+	cons = sc->vte_cdata.vte_rx_cons;
 #ifdef NETGRAPH
 	ether_crc_len = (sc->vte_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
-#endif /* NETGRAPH */
-	cons = sc->vte_cdata.vte_rx_cons;
+#endif /* NETGRAPH */	
 	ifp = sc->vte_ifp;
+
 	for (prog = 0; (ifp->if_drv_flags & IFF_DRV_RUNNING) != 0; prog++,
 	    VTE_DESC_INC(cons, VTE_RX_RING_CNT)) {
 		rxd = &sc->vte_cdata.vte_rxdesc[cons];
@@ -2043,24 +2046,20 @@ vte_rxfilter(struct vte_softc *sc)
 	}
 
 	mcr = CSR_READ_2(sc, VTE_MCR0);
-#ifdef NETGRAPH
-	mcr &= ~(MCR0_ACCPT_ERR 
-		| MCR0_PROMISC 
-		| MCR0_MULTICAST);
-#else
 	mcr &= ~(MCR0_PROMISC | MCR0_MULTICAST);
-#endif /* ! NETGRAPH */
+#ifdef NETGRAPH			
+	if (sc->vte_tap_hook != NULL)
+		mcr |= MCR0_ACCPT_ERR;
+	else 
+		mcr &= ~MCR0_ACCPT_ERR;
+#endif /* NETGRAPGH */
 	mcr |= MCR0_BROADCAST_DIS;
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		mcr &= ~MCR0_BROADCAST_DIS;
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-		if ((ifp->if_flags & IFF_PROMISC) != 0) {
+		if ((ifp->if_flags & IFF_PROMISC) != 0) 
 			mcr |= MCR0_PROMISC;
-#ifdef NETGRAPH			
-			if (sc->vte_tap_hook != NULL)
-				mcr |= MCR0_ACCPT_ERR;
-#endif /* NETGRAPGH */
-		}
+			
 		if ((ifp->if_flags & IFF_ALLMULTI) != 0)
 			mcr |= MCR0_MULTICAST;
 		mchash[0] = 0xFFFF;
