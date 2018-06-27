@@ -555,10 +555,10 @@ rl_rxfilter(struct rl_softc *sc)
 		| RL_RXCFG_RX_MULTI);
 
 #ifdef NETGRAPH
-		if (sc->rl_tap_hook != NULL)
-			rxfilt |= RL_RXCFG_RX_ERRPKT;
-		else
-			rxfilt &= ~RL_RXCFG_RX_ERRPKT;
+	if (sc->rl_tap_hook != NULL)
+		rxfilt |= RL_RXCFG_RX_ERRPKT;
+	else
+		rxfilt &= ~RL_RXCFG_RX_ERRPKT;
 #endif /* NETGRAPH */
 
 	/* Always accept frames destined for this host. */

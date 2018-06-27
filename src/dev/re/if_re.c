@@ -691,10 +691,10 @@ re_set_rxmode(struct rl_softc *sc)
 		| RL_RXCFG_RX_BROAD;
 
 #ifdef NETGRAPH
-		if (sc->rl_tap_hook != NULL)
-			rxfilt |= RL_RXCFG_RX_ERRPKT;
-		else
-			rxfilt &= ~RL_RXCFG_RX_ERRPKT;
+	if (sc->rl_tap_hook != NULL)
+		rxfilt |= RL_RXCFG_RX_ERRPKT;
+	else
+		rxfilt &= ~RL_RXCFG_RX_ERRPKT;
 #endif /* NETGRAPH */	
 
 	if ((sc->rl_flags & RL_FLAG_EARLYOFF) != 0)
