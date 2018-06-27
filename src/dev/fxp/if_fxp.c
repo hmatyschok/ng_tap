@@ -109,7 +109,7 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/fxp/if_fxp.c 298955 2016-05-03 03:41:25Z
 #include <dev/fxp/rcvbundl.h>
 #ifdef NETGRAPH
 #include <dev/fxp/ng_fxp_tap.h>
-NG_TAP_MODULE(fxp, fxp_softc, NG_FXP_TAP_NODE_TYPE)
+NG_TAP_MODULE(fxp, fxp_softc, NG_FXP_TAP_NODE_TYPE);
 #endif /* NETGRAPH */
 
 MODULE_DEPEND(fxp, pci, 1, 1, 1);
@@ -931,16 +931,21 @@ fxp_attach(device_t dev)
 	 * Hook our interrupt after all initialization is complete.
 	 */
 	error = bus_setup_intr(dev, sc->fxp_res[1], INTR_TYPE_NET | INTR_MPSAFE,
-			       NULL, fxp_intr, sc, &sc->ih);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_fxp_tap_attach(sc);
-#endif /* NETGRAPH */			       
+			       NULL, fxp_intr, sc, &sc->ih);			       
 	if (error) {
 		device_printf(dev, "could not setup irq\n");
 		ether_ifdetach(sc->fxp_ifp);
 		goto fail;
 	}
+	
+#ifdef NETGRAPH
+	error = ng_fxp_tap_attach(sc);
+	if (error) {
+		device_printf(dev, "could not setup ng_fxp_tap(4)\n");
+		ether_ifdetach(sc->fxp_ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
 
 	/*
 	 * Configure hardware to reject magic frames otherwise

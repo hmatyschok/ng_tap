@@ -2306,7 +2306,12 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 				 * discard all the pieces.
 				 */
 #ifdef NETGRAPH
-				if (sc->rl_tap_hook == NULL) {
+				if (sc->rl_tap_hook != NULL) {
+					if ((rxstat & RL_RDESC_STAT_CRCERR) != 0)
+						rxerr = 0;
+				}
+
+				if (rxerr != 0) {
 					if (sc->rl_head != NULL) {
 						m_freem(sc->rl_head);
 						sc->rl_head = sc->rl_tail = NULL;
@@ -2358,9 +2363,17 @@ re_rxeof(struct rl_softc *sc, int *rx_npktsp)
 			 * care about anyway.
 			 */
 			if (m->m_len <= ETHER_CRC_LEN) {
+#ifdef NETGRAPH
+				if (sc->rl_tap_hook == NULL) {
+					sc->rl_tail->m_len -=
+						(ETHER_CRC_LEN - m->m_len);
+					m_freem(m);	
+				}
+#else
 				sc->rl_tail->m_len -=
 				    (ETHER_CRC_LEN - m->m_len);
 				m_freem(m);
+#endif /* ! NETGRAPH */
 			} else {
 #ifdef NETGRAPH
 				m->m_len -= ether_crc_len;
