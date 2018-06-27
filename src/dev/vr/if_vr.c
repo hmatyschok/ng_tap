@@ -484,16 +484,15 @@ vr_set_filter(struct vr_softc *sc)
 
 	ifp = sc->vr_ifp;
 	rxfilt = CSR_READ_1(sc, VR_RXCFG);
-#ifdef NETGRAPH
-	rxfilt &= ~(VR_RXCFG_RX_ERRPKTS 
-		| VR_RXCFG_RX_PROMISC 
-		| VR_RXCFG_RX_BROAD 
-		| VR_RXCFG_RX_MULTI);
-#else
 	rxfilt &= ~(VR_RXCFG_RX_PROMISC 
 		| VR_RXCFG_RX_BROAD 
 		| VR_RXCFG_RX_MULTI);
-#endif /* ! NETGRAPH */
+#ifdef NETGRAPH
+	if (sc->vr_tap_hook != NULL)
+		rxfilt |= VR_RXCFG_RX_ERRPKTS;
+	else
+		rxfilt &= ~VR_RXCFG_RX_ERRPKTS;
+#endif /* NETGRAPH */
 	if (ifp->if_flags & IFF_BROADCAST)
 		rxfilt |= VR_RXCFG_RX_BROAD;
 	if (ifp->if_flags & IFF_ALLMULTI || ifp->if_flags & IFF_PROMISC) {
@@ -501,10 +500,6 @@ vr_set_filter(struct vr_softc *sc)
 
 		if (ifp->if_flags & IFF_PROMISC) {
 			rxfilt |= VR_RXCFG_RX_PROMISC;
-#ifdef NETGRAPH
-			if (sc->vr_tap_hook != NULL)
-				rxfilt |= VR_RXCFG_RX_ERRPKTS;
-#endif /* NETGRAPH */
 		}
 		if (ifp->if_flags & IFF_PROMISC)
 			rxfilt |= VR_RXCFG_RX_PROMISC;
@@ -850,8 +845,10 @@ vr_attach(device_t dev)
 	}	
 
 #ifdef NETGRAPH  
-	if (error == 0) 
-		error = ng_vr_tap_attach(sc);
+	if ((error = ng_vr_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_vr_tap(4)\n");
+		ether_ifdetach(ifp);
+	}
 #endif /* NETGRAPH */
 
 fail:
