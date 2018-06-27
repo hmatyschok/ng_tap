@@ -576,16 +576,15 @@ vge_rxfilter(struct vge_softc *sc)
 	hashes[1] = 0;
 
 	rxcfg = CSR_READ_1(sc, VGE_RXCTL);
-#ifdef NETGRAPH
-/* 
- * TODO: chk this condition on code-base from other device-driver..
- */  
-	if (sc->vge_tap_hook == NULL) 
-		rxcfg &= ~VGE_RXCTL_RX_BADFRAMES;
-#endif /* NETGRAPH */
 	rxcfg &= ~(VGE_RXCTL_RX_MCAST 
 		| VGE_RXCTL_RX_BCAST 
 		| VGE_RXCTL_RX_PROMISC);
+#ifdef NETGRAPH 
+	if (sc->vge_tap_hook != NULL)
+		rxcfg |= VGE_RXCTL_RX_BADFRAMES;
+	else 
+		rxcfg &= ~VGE_RXCTL_RX_BADFRAMES;
+#endif /* NETGRAPH */		
 	/*
 	 * Always allow VLAN oversized frames and frames for
 	 * this host.
@@ -596,13 +595,9 @@ vge_rxfilter(struct vge_softc *sc)
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		rxcfg |= VGE_RXCTL_RX_BCAST;
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-		if ((ifp->if_flags & IFF_PROMISC) != 0) {
+		if ((ifp->if_flags & IFF_PROMISC) != 0) 
 			rxcfg |= VGE_RXCTL_RX_PROMISC;
-#ifdef NETGRAPH
-			if (sc->vge_tap_hook != NULL)
-				rxcfg |= VGE_RXCTL_RX_BADFRAMES;
-#endif /* NETGRAPH */
-		}	
+	
 		if ((ifp->if_flags & IFF_ALLMULTI) != 0) {
 			hashes[0] = 0xFFFFFFFF;
 			hashes[1] = 0xFFFFFFFF;
@@ -1176,16 +1171,17 @@ vge_attach(device_t dev)
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->vge_irq, INTR_TYPE_NET|INTR_MPSAFE,
 	    NULL, vge_intr, sc, &sc->vge_intrhand);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_vge_tap_attach(sc);
-#endif /* NETGRAPH */
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-
+#ifdef NETGRAPH
+	if ((error = ng_vge_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_vge_tap(4)\n");
+		ether_ifdetach(ifp);
+	}
+#endif /* NETGRAPH */	
 fail:
 	if (error)
 		vge_detach(dev);
@@ -1488,10 +1484,10 @@ vge_rxeof(struct vge_softc *sc, int count)
 
 	VGE_LOCK_ASSERT(sc);
 
-	ifp = sc->vge_ifp;
 #ifdef NETGRAPH
 	ether_crc_len = (sc->vge_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
 #endif /* NETGRAPH */
+	ifp = sc->vge_ifp;
 	bus_dmamap_sync(sc->vge_cdata.vge_rx_ring_tag,
 	    sc->vge_cdata.vge_rx_ring_map,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
@@ -2129,11 +2125,9 @@ vge_init_locked(struct vge_softc *sc)
 	/*
 	 * Initialize the RX and TX descriptors and mbufs.
 	 */
-
-	error = vge_rx_list_init(sc);
-	if (error != 0) {
-                device_printf(sc->vge_dev, "no memory for Rx buffers.\n");
-                return;
+	if ((error = vge_rx_list_init(sc)) != 0) {
+		device_printf(sc->vge_dev, "no memory for Rx buffers.\n");
+		return;
 	}
 	vge_tx_list_init(sc);
 	/* Clear MAC statistics. */
