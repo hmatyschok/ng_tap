@@ -419,12 +419,7 @@ ae_attach(device_t dev)
 	 */
 	error = bus_setup_intr(dev, sc->ae_irq[0], 
 		INTR_TYPE_NET | INTR_MPSAFE,
-	    ae_intr, NULL, sc, &sc->ae_intrhand);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_ae_tap_attach(sc);
-#endif /* NETGRAPH */	    
-	    
+	    ae_intr, NULL, sc, &sc->ae_intrhand);	    
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
 		taskqueue_free(sc->ae_tq);
@@ -432,7 +427,14 @@ ae_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-
+#ifdef NETGRAPH
+	if ((error = ng_ae_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_ae_tap(4).\n");
+		taskqueue_free(sc->ae_tq);
+		sc->ae_tq = NULL;
+		ether_ifdetach(ifp);
+	}
+#endif /* NETGRAPH */
 fail:
 	if (error != 0)
 		ae_detach(dev);
@@ -2147,7 +2149,9 @@ ae_rxfilter(ae_softc_t *sc)
 	ifp = sc->ae_ifp;
 
 	rxcfg = AE_READ_4(sc, AE_MAC_REG);
-	rxcfg &= ~(AE_MAC_MCAST_EN | AE_MAC_BCAST_EN | AE_MAC_PROMISC_EN);
+	rxcfg &= ~(AE_MAC_MCAST_EN 
+		| AE_MAC_BCAST_EN 
+		| AE_MAC_PROMISC_EN);
 
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		rxcfg |= AE_MAC_BCAST_EN;
