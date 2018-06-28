@@ -690,10 +690,6 @@ age_attach(device_t dev)
 		if (error != 0)
 			break;
 	}
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_age_tap_attach(sc);
-#endif /* NETHGRAPH */	
 	
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
@@ -702,6 +698,14 @@ age_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH	
+	if ((error = ng_age_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_age_tap(4).\n");
+		taskqueue_free(sc->age_tq);
+		sc->age_tq = NULL;
+		ether_ifdetach(ifp);
+	}
+#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
@@ -2528,13 +2532,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-			if (sc->age_tap_hook != NULL) {
-				ng_age_tap_input(sc->age_tap_hook, &m);
-				if (m != NULL) {
-					(*ifp->if_input)(ifp, m);
-				}
-			} else
-				(*ifp->if_input)(ifp, m);	
+			NG_TAP_INPUT(age, sc, ifp, m);
 #else
 			(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */
@@ -2929,7 +2927,9 @@ age_init_locked(struct age_softc *sc)
 	CSR_WRITE_4(sc, AGE_INTR_MASK, AGE_INTRS);
 
 	/* Finally enable Tx/Rx MAC. */
-	CSR_WRITE_4(sc, AGE_MAC_CFG, reg | MAC_CFG_TX_ENB | MAC_CFG_RX_ENB);
+	reg |= (MAC_CFG_TX_ENB | MAC_CFG_RX_ENB);
+	
+	CSR_WRITE_4(sc, AGE_MAC_CFG, reg);
 
 	sc->age_flags &= ~AGE_FLAG_LINK;
 	/* Switch to the current media. */
@@ -3249,7 +3249,10 @@ age_rxfilter(struct age_softc *sc)
 	ifp = sc->age_ifp;
 
 	rxcfg = CSR_READ_4(sc, AGE_MAC_CFG);
-	rxcfg &= ~(MAC_CFG_ALLMULTI | MAC_CFG_BCAST | MAC_CFG_PROMISC);
+	rxcfg &= ~(MAC_CFG_ALLMULTI 
+		| MAC_CFG_BCAST 
+		| MAC_CFG_PROMISC);
+		
 	if ((ifp->if_flags & IFF_BROADCAST) != 0)
 		rxcfg |= MAC_CFG_BCAST;
 	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {

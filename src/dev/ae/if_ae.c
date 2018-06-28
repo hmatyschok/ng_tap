@@ -2001,13 +2001,7 @@ ae_rxeof(ae_softc_t *sc, ae_rxd_t *rxd)
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-	if (sc->ae_tap_hook != NULL) {
-		ng_ae_tap_input(sc->ae_tap_hook, &m);
-		if (m != NULL) {
-			(*ifp->if_input)(ifp, m);
-		}
-	} else
-		(*ifp->if_input)(ifp, m);	
+	NG_TAP_INPUT(ae, sc, fp, m);
 #else
 	(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */
