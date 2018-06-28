@@ -701,8 +701,6 @@ age_attach(device_t dev)
 #ifdef NETGRAPH	
 	if ((error = ng_age_tap_attach(sc)) != 0) {
 		device_printf(dev, "could not set up ng_age_tap(4).\n");
-		taskqueue_free(sc->age_tq);
-		sc->age_tq = NULL;
 		ether_ifdetach(ifp);
 	}
 #endif /* NETHGRAPH */

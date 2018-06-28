@@ -430,8 +430,6 @@ ae_attach(device_t dev)
 #ifdef NETGRAPH
 	if ((error = ng_ae_tap_attach(sc)) != 0) {
 		device_printf(dev, "could not set up ng_ae_tap(4).\n");
-		taskqueue_free(sc->ae_tq);
-		sc->ae_tq = NULL;
 		ether_ifdetach(ifp);
 	}
 #endif /* NETGRAPH */

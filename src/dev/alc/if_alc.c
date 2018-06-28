@@ -1645,10 +1645,6 @@ alc_attach(device_t dev)
 		if (error != 0)
 			break;
 	}
-#ifdef NETGRAPH 	
-	if (error == 0)
-		error = ng_alc_tap_attach(sc);
-#endif /* NETGRAPH */
 	
 	if (error != 0) {
 		device_printf(dev, "could not set up interrupt handler.\n");
@@ -1657,6 +1653,12 @@ alc_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
+#ifdef NETGRAPH 	
+	if ((error = ng_alc_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_alc_tap(4).\n");
+		ether_ifdetach(ifp);
+	}
+#endif /* NETGRAPH */
 	
 fail:
 	if (error != 0)
