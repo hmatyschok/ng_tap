@@ -1524,22 +1524,25 @@ bce_attach(device_t dev)
 	callout_init_mtx(&sc->bce_pulse_callout, &sc->bce_mtx, 0);
 #endif
 
+#ifdef NETGRAPH
+	if ((rc = ng_bce_tap_attach(sc)) != 0)
+		BCE_PRINTF("%s(%d): Failed to setup ng_bce_tap(4)!\n",
+		    __FILE__, __LINE__);
+		bce_detach(dev);
+		goto bce_attach_exit;
+#endif /* NETGRAPH */
+
 	/* Hookup IRQ last. */
 	rc = bus_setup_intr(dev, sc->bce_res_irq, INTR_TYPE_NET | INTR_MPSAFE,
 		NULL, bce_intr, sc, &sc->bce_intrhand);
-
-#ifdef NETGRAPH
-	if (rc == 0)
-		rc = ng_bce_tap_attach(sc);
-#endif /* NETGRAPH */
-
+		
 	if (rc) {
 		BCE_PRINTF("%s(%d): Failed to setup IRQ!\n",
 		    __FILE__, __LINE__);
 		bce_detach(dev);
 		goto bce_attach_exit;
 	}
-
+	
 	/*
 	 * At this point we've acquired all the resources
 	 * we need to run so there's no turning back, we're

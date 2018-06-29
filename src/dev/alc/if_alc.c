@@ -1619,6 +1619,15 @@ alc_attach(device_t dev)
 	/* Tell the upper layer(s) we support long frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH 	
+	if ((error = ng_alc_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_alc_tap(4).\n");
+		ether_ifdetach(ifp);
+		error = ENXIO;
+		goto fail;
+	}
+#endif /* NETGRAPH */
+
 	/* Create local taskq. */
 	sc->alc_tq = taskqueue_create_fast("alc_taskq", M_WAITOK,
 	    taskqueue_thread_enqueue, &sc->alc_tq);
@@ -1653,13 +1662,7 @@ alc_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH 	
-	if ((error = ng_alc_tap_attach(sc)) != 0) {
-		device_printf(dev, "could not set up ng_alc_tap(4).\n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */
-	
+		
 fail:
 	if (error != 0)
 		alc_detach(dev);

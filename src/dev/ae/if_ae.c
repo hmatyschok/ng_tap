@@ -400,6 +400,15 @@ ae_attach(device_t dev)
 	/* Tell the upper layer(s) we support long frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH
+	if ((error = ng_ae_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_ae_tap(4).\n");
+		ether_ifdetach(ifp);
+		error = ENXIO;
+		goto fail;
+	}
+#endif /* NETGRAPH */
+
 	/*
 	 * Create and run all helper tasks.
 	 */
@@ -427,12 +436,7 @@ ae_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH
-	if ((error = ng_ae_tap_attach(sc)) != 0) {
-		device_printf(dev, "could not set up ng_ae_tap(4).\n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */
+
 fail:
 	if (error != 0)
 		ae_detach(dev);

@@ -665,6 +665,15 @@ age_attach(device_t dev)
 	/* Tell the upper layer(s) we support long frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH	
+	if ((error = ng_age_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set up ng_age_tap(4).\n");
+		ether_ifdetach(ifp);
+		error = ENXIO;
+		goto fail;
+	}
+#endif /* NETHGRAPH */
+
 	/* Create local taskq. */
 	sc->age_tq = taskqueue_create_fast("age_taskq", M_WAITOK,
 	    taskqueue_thread_enqueue, &sc->age_tq);
@@ -698,12 +707,6 @@ age_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH	
-	if ((error = ng_age_tap_attach(sc)) != 0) {
-		device_printf(dev, "could not set up ng_age_tap(4).\n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETHGRAPH */
 
 fail:
 	if (error != 0)
