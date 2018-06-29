@@ -2474,7 +2474,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 #endif /* ! NETGRAPH */
 				} else {
 #ifdef NETGRAPH					
-					mp->m_len -= ETHER_CRC_LEN;
+					mp->m_len -= ether_crc_len;
 #else
 					mp->m_len -= ETHER_CRC_LEN;
 #endif /* ! NETGRAPH */		
