@@ -546,17 +546,18 @@ bfe_attach(device_t dev)
 	ifp->if_capabilities |= IFCAP_VLAN_MTU;
 	ifp->if_capenable |= IFCAP_VLAN_MTU;
 
+#ifdef NETGRAPH
+	if ((error = ng_bfe_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_bfe_tap(4)\n");
+		goto fail;
+	}
+#endif /* NETGRAPH */	
+
 	/*
 	 * Hook interrupt last to avoid having to lock softc
 	 */
 	error = bus_setup_intr(dev, sc->bfe_irq, INTR_TYPE_NET | INTR_MPSAFE,
 			NULL, bfe_intr, sc, &sc->bfe_intrhand);
-
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_bfe_tap_attach(sc);
-#endif /* NETGRAPH */
-
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		goto fail;
@@ -1132,7 +1133,6 @@ bfe_set_rx_mode(struct bfe_softc *sc)
 		val &= ~BFE_RXCONF_DBCAST;
 	else
 		val |= BFE_RXCONF_DBCAST;
-
 
 	CSR_WRITE_4(sc, BFE_CAM_CTRL, 0);
 	bfe_cam_write(sc, IF_LLADDR(sc->bfe_ifp), i++);

@@ -1639,6 +1639,13 @@ bge_setpromisc(struct bge_softc *sc)
 		BGE_SETBIT(sc, BGE_RX_MODE, BGE_RXMODE_RX_PROMISC);
 	else
 		BGE_CLRBIT(sc, BGE_RX_MODE, BGE_RXMODE_RX_PROMISC);
+		
+#ifdef NETGRAPH
+	if (sc->bge_tap_hook != NULL)
+		BGE_SETBIT(sc, BGE_RX_MODE, BGE_RXMODE_RX_NO_CRC_CHECK);
+	else
+		BGE_SETBIT(sc, BGE_RX_MODE, ~BGE_RXMODE_RX_NO_CRC_CHECK);
+#endif /* NETGRAPH */		
 }
 
 static void
@@ -3934,6 +3941,13 @@ again:
 	/* Tell upper layer we support long frames. */
 	if_setifheaderlen(ifp, sizeof(struct ether_vlan_header));
 
+#ifdef NETGRAPH  
+	if ((error = ng_bge_tap_attach(sc)) != 0) {
+		device_printf(sc->bge_dev, "couldn't set up ng_bge_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail; 
+	}
+#endif /* NETGRAPH */
 	/*
 	 * Hookup IRQ last.
 	 */
@@ -3963,12 +3977,6 @@ again:
 		error = bus_setup_intr(dev, sc->bge_irq,
 		    INTR_TYPE_NET | INTR_MPSAFE, NULL, bge_intr, sc,
 		    &sc->bge_intrhand);
-
-#ifdef NETGRAPH  
-	if (error == 0) 
-		error = ng_bge_tap_attach(sc);
-#endif /* NETGRAPH */
-
 	if (error) {
 		ether_ifdetach(ifp);
 		device_printf(sc->bge_dev, "couldn't set up irq\n");
@@ -4494,24 +4502,10 @@ bge_rxeof(struct bge_softc *sc, uint16_t rx_prod, int holdlck)
 #ifdef NETGRAPH
 		if (holdlck != 0) {
 			BGE_UNLOCK(sc);
-			
-			if (sc->bge_tap_hook != NULL) {
-				ng_bge_tap_input(sc->bge_tap_hook, &m);
-				if (m != NULL) {
-					if_input(ifp, m);
-				}
-			} else
-				if_input(ifp, m);
-				
+			NG_TAP_INPUT(bge, sc, ifp, m);
 			BGE_LOCK(sc);
 		} else {
-			if (sc->bge_tap_hook != NULL) {
-				ng_bge_tap_input(sc->bge_tap_hook, &m);
-				if (m != NULL) {
-					if_input(ifp, m);
-				}
-			} else
-				if_input(ifp, m);
+			NG_TAP_INPUT(bge, sc, ifp, m);
 		}
 #else
 		if (holdlck != 0) {

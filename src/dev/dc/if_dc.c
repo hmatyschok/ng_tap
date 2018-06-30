@@ -317,9 +317,11 @@ static void dc_setfilt_asix(struct dc_softc *);
 static void dc_setfilt_admtek(struct dc_softc *);
 static void dc_setfilt_uli(struct dc_softc *);
 static void dc_setfilt_xircom(struct dc_softc *);
-
+#ifdef NETGRAPH
 static void dc_setfilt(struct dc_softc *, int);
-
+#else
+static void dc_setfilt(struct dc_softc *);
+#endif /* NETGRAPH */
 static void dc_reset(struct dc_softc *);
 static int dc_list_rx_init(struct dc_softc *);
 static int dc_list_tx_init(struct dc_softc *);
@@ -1357,8 +1359,13 @@ dc_setfilt_xircom(struct dc_softc *sc)
 	sc->dc_wdog_timer = 5;
 }
 
+#ifdef NETGRAPH
 static void
 dc_setfilt(struct dc_softc *sc, int pswitch)
+#else
+static void
+dc_setfilt(struct dc_softc *sc)
+#endif /* ! NETGRAPH */
 {
 #ifdef NETGRAPH
 	if (pswitch != 0) {
@@ -2531,13 +2538,18 @@ dc_attach(device_t dev)
 	 */
 	ether_ifattach(ifp, (caddr_t)eaddr);
 
+#ifdef NETGRAPH
+	if ((ng_dc_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_dc_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
+
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->dc_irq, INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, dc_intr, sc, &sc->dc_intrhand);
-#ifdef NETGRAPH
-	if (error == 0)
-		ng_dc_tap_attach(sc);
-#endif /* NETGRAPH */
+	    
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
@@ -3836,8 +3848,11 @@ dc_init_locked(struct dc_softc *sc)
 	 * some clones requires DMAing a setup frame via the TX
 	 * engine, and we need the transmitter enabled for that.
 	 */
+#ifdef NETGRAPH
 	dc_setfilt(sc, 0);
-
+#else		 
+	dc_setfilt(sc);
+#endif /* ! NETGRAPH */	
 	/* Enable receiver. */
 	DC_SETBIT(sc, DC_NETCFG, DC_NETCFG_RX_ON);
 	CSR_WRITE_4(sc, DC_RXSTART, 0xFFFFFFFF);
@@ -3948,8 +3963,13 @@ dc_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 				(IFF_PROMISC | IFF_ALLMULTI);
 
 			if (ifp->if_drv_flags & IFF_DRV_RUNNING) {
-				if (need_setfilt)
+				if (need_setfilt) {
+#ifdef NETGRAPH
 					dc_setfilt(sc, 1);
+#else
+					dc_setfilt(sc);
+#endif /* !NETGRAPH */
+				}
 			} else {
 				ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 				dc_init_locked(sc);
@@ -3964,8 +3984,13 @@ dc_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		DC_LOCK(sc);
-		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
+		if (ifp->if_drv_flags & IFF_DRV_RUNNING) {
+#ifdef NETGRAPH
 			dc_setfilt(sc, 1);
+#else
+			dc_setfilt(sc);
+#endif /* !NETGRAPH */
+		}
 		DC_UNLOCK(sc);
 		break;
 	case SIOCGIFMEDIA:
