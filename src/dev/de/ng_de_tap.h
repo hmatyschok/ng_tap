@@ -24,12 +24,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _FFEC_NG_FFEC_TAP_H_
-#define _FFEC_NG_FFEC_TAP_H_
+#ifndef _DE_NG_DE_TAP_H_
+#define _DE_NG_DE_TAP_H_
 
 #include <netgraph/ng_tap.h>
 
 /* Node name for ng_de_tap(4) */
-#define NG_FFEC_TAP_NODE_TYPE 	"ffec_tap"
+#define NG_DE_TAP_NODE_TYPE 	"de_tap"
 
-#endif /* _FFEC_NG_FFEC_TAP_H_ */
+#endif /* _DE_NG_DE_TAP_H_ */

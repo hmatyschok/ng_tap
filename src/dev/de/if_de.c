@@ -4456,8 +4456,13 @@ tulip_watchdog(void *arg)
     TULIP_PERFMERGE(sc, perf_rxget);
 }
 
+#ifdef NETGRAPH
+static int
+tulip_attach(tulip_softc_t * const sc)
+#else
 static void
 tulip_attach(tulip_softc_t * const sc)
+#endif /* ! NETGRAPH */
 {
     struct ifnet *ifp;
 
@@ -4497,6 +4502,10 @@ tulip_attach(tulip_softc_t * const sc)
     TULIP_LOCK(sc);
     sc->tulip_flags &= ~TULIP_DEVICEPROBE;
     TULIP_UNLOCK(sc);
+    
+#ifdef NETGRAPH
+	return (ng_tulip_tap_attach(sc));
+#endif /* NETGRAPH */    
 }
 
 /* Release memory for a single descriptor ring. */
@@ -4933,7 +4942,18 @@ tulip_pci_attach(device_t dev)
 	if (sc->tulip_features & TULIP_HAVE_SHAREDINTR)
 	    intr_rtn = tulip_intr_shared;
 
+#ifdef NETGRAPH
+	 if (tulip_attach(sc) != 0) {
+		device_printf(dev, "couldn't initialize ng_de_tap(4) node\n");
+		tulip_busdma_cleanup(sc);
+		ether_ifdetach(sc->tulip_ifp);
+		if_free(sc->tulip_ifp);
+		mtx_destroy(TULIP_MUTEX(sc));
+		return (ENXIO);
+	}
+#else
 	tulip_attach(sc);
+#endif /* ! NETGRAPH */
 
 	/* Setup interrupt last. */
 	if ((sc->tulip_features & TULIP_HAVE_SLAVEDINTR) == 0) {
@@ -4953,16 +4973,7 @@ tulip_pci_attach(device_t dev)
 	    }
 	}
     }
-#ifdef NETGRAPH  
-    if (ng_tulip_tap_attach(sc) != 0) {
-		device_printf(dev, "couldn't initialize ng_de_tap(4) node\n");
-		tulip_busdma_cleanup(sc);
-		ether_ifdetach(sc->tulip_ifp);
-		if_free(sc->tulip_ifp);
-		mtx_destroy(TULIP_MUTEX(sc));
-		return (ENXIO);
-	}
-#endif /* NETGRAPH */    
+        
     return 0;
 }
 
