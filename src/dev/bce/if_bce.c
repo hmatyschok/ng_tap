@@ -8146,14 +8146,16 @@ bce_set_rx_mode(struct bce_softc *sc)
 	ifp = sc->bce_ifp;
 
 	/* Initialize receive mode default settings. */
-#ifdef NETGRAPH
-	rx_mode = sc->rx_mode & ~(BCE_EMAC_RX_MODE_PROMISCUOUS
-		| BCE_EMAC_RX_MODE_NO_CRC_CHK
-		| BCE_EMAC_RX_MODE_KEEP_VLAN_TAG);
-#else
 	rx_mode = sc->rx_mode & ~(BCE_EMAC_RX_MODE_PROMISCUOUS 
 		| BCE_EMAC_RX_MODE_KEEP_VLAN_TAG);
+
+#ifdef NETGRAPH
+	if (sc->bce_tap_hook != NULL)
+		rx_mode |= BCE_EMAC_RX_MODE_NO_CRC_CHK;
+	else
+		rx_mode &= ~(BCE_EMAC_RX_MODE_NO_CRC_CHK);
 #endif /* ! NETGRAPH */
+
 	sort_mode = 1 | BCE_RPM_SORT_USER0_BC_EN;
 
 	/*
@@ -8173,12 +8175,6 @@ bce_set_rx_mode(struct bce_softc *sc)
 
 		/* Enable promiscuous mode. */
 		rx_mode |= BCE_EMAC_RX_MODE_PROMISCUOUS;
-		
-#ifdef NETGRAPH 		
-		if (sc->bce_tap_hook != NULL)
-			rx_mode |= BCE_EMAC_RX_MODE_NO_CRC_CHK;
-#endif /* NETGRAPH */			
-
 		sort_mode |= BCE_RPM_SORT_USER0_PROM_EN;
 	} else if (ifp->if_flags & IFF_ALLMULTI) {
 		DBPRINT(sc, BCE_INFO_MISC, "Enabling all multicast mode.\n");
