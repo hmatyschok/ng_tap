@@ -926,6 +926,14 @@ fxp_attach(device_t dev)
 	 */
 	if_setsendqlen(ifp, FXP_NTXCB - 1);
 	if_setsendqready(ifp);
+	
+#ifdef NETGRAPH
+	if ((error = ng_fxp_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not setup ng_fxp_tap(4)\n");
+		ether_ifdetach(sc->fxp_ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
 
 	/*
 	 * Hook our interrupt after all initialization is complete.
@@ -937,15 +945,6 @@ fxp_attach(device_t dev)
 		ether_ifdetach(sc->fxp_ifp);
 		goto fail;
 	}
-	
-#ifdef NETGRAPH
-	error = ng_fxp_tap_attach(sc);
-	if (error) {
-		device_printf(dev, "could not setup ng_fxp_tap(4)\n");
-		ether_ifdetach(sc->fxp_ifp);
-		goto fail;
-	}
-#endif /* NETGRAPH */
 
 	/*
 	 * Configure hardware to reject magic frames otherwise
@@ -2924,8 +2923,9 @@ fxp_ioctl(if_t ifp, u_long command, caddr_t data)
 			    (IFF_PROMISC | IFF_ALLMULTI | IFF_LINK0)) != 0) {
 				if_setdrvflagbits(ifp, 0, IFF_DRV_RUNNING);
 				fxp_init_body(sc, 0);
-			} else if ((if_getdrvflags(ifp) & IFF_DRV_RUNNING) == 0)
+			} else if ((if_getdrvflags(ifp) & IFF_DRV_RUNNING) == 0) {
 				fxp_init_body(sc, 1);
+			}
 		} else {
 			if ((if_getdrvflags(ifp) & IFF_DRV_RUNNING) != 0)
 				fxp_stop(sc);
@@ -2948,10 +2948,10 @@ fxp_ioctl(if_t ifp, u_long command, caddr_t data)
 	case SIOCGIFMEDIA:
 		if (sc->miibus != NULL) {
 			mii = device_get_softc(sc->miibus);
-                        error = ifmedia_ioctl(ifp, ifr,
+			error = ifmedia_ioctl(ifp, ifr,
                             &mii->mii_media, command);
 		} else {
-                        error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, command);
+			error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, command);
 		}
 		break;
 

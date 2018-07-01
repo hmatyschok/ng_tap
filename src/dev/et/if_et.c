@@ -376,12 +376,17 @@ et_attach(device_t dev)
 	/* Tell the upper layer(s) we support long frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
-	error = bus_setup_intr(dev, sc->et_irq_res, INTR_TYPE_NET | INTR_MPSAFE,
-	    NULL, et_intr, sc, &sc->et_irq_handle);
 #ifdef NETGRAPH
-	if (error == 0)
-		error = ng_et_tap_attach(sc);
-#endif /* NETGRAPH */	    
+	if ((error = ng_et_tap_attach(sc)) != 0) {
+		device_printf(dev, "can't setup ng_et_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */	   
+
+	error = bus_setup_intr(dev, sc->et_irq_res, 
+		INTR_TYPE_NET | INTR_MPSAFE,
+		NULL, et_intr, sc, &sc->et_irq_handle); 
 	if (error) {
 		ether_ifdetach(ifp);
 		device_printf(dev, "can't setup intr\n");
