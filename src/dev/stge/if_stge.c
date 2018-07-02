@@ -177,8 +177,13 @@ static int	stge_eeprom_wait(struct stge_softc *);
 static void	stge_read_eeprom(struct stge_softc *, int, uint16_t *);
 static void	stge_tick(void *);
 static void	stge_stats_update(struct stge_softc *);
+#ifdef NETGRAPH
 static void	stge_set_filter(struct stge_softc *, int);
 static void	stge_set_multi(struct stge_softc *, int);
+#else
+static void	stge_set_filter(struct stge_softc *);
+static void	stge_set_multi(struct stge_softc *);
+#endif /* ! NETGRAPH */
 
 static void	stge_link_task(void *, int);
 static void	stge_intr(void *);
@@ -1318,8 +1323,13 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if ((ifp->if_flags & IFF_UP) != 0) {
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
 				if (((ifp->if_flags ^ sc->stge_if_flags)
-				    & IFF_PROMISC) != 0)
+				    & IFF_PROMISC) != 0) {
+#ifdef NETGRAPH						
 					stge_set_filter(sc, 1);
+#else
+					stge_set_filter(sc);
+#endif /* ! NETGRAPH */
+				}
 			} else {
 				if (sc->stge_detach == 0)
 					stge_init_locked(sc);
@@ -1334,8 +1344,13 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		STGE_LOCK(sc);
-		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
+		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
+#ifdef NETGRAPH
 			stge_set_multi(sc, 1);
+#else
+			stge_set_multi(sc);
+#endif /* ! NETGRAPH */			
+		}
 		STGE_UNLOCK(sc);
 		break;
 	case SIOCSIFMEDIA:
@@ -2096,10 +2111,17 @@ stge_init_locked(struct stge_softc *sc)
 	    (1U << 21));
 
 	/* Set up the receive filter. */
+#ifdef NETGRAPH
 	stge_set_filter(sc, 0);
+#else
+	stge_set_filter(sc);
+#endif /* ! NETGRAPH */
 	/* Program multicast filter. */
+#ifdef NETGRAPH
 	stge_set_multi(sc, 1);
-
+#else
+	stge_set_multi(sc);
+#endif /* ! NETGRAPH */
 	/*
 	 * Give the transmit and receive ring to the chip.
 	 */
@@ -2546,8 +2568,13 @@ stge_newbuf(struct stge_softc *sc, int idx)
  *
  *	Set up the receive filter.
  */
+#ifdef NETGRAPH 
 static void
 stge_set_filter(struct stge_softc *sc, int pswitch)
+#else
+static void
+stge_set_filter(struct stge_softc *sc)
+#endif /* ! NETGRAPH */
 {
 	struct ifnet *ifp;
 	uint16_t mode;
@@ -2585,8 +2612,13 @@ stge_set_filter(struct stge_softc *sc, int pswitch)
 #endif /* NETGRAPH */	
 }
 
+#ifdef NETGRAPH
 static void
 stge_set_multi(struct stge_softc *sc, int pswitch)
+#else
+static void
+stge_set_multi(struct stge_softc *sc)
+#endif /* ! NETGRAPH */
 {
 	struct ifnet *ifp;
 	struct ifmultiaddr *ifma;
