@@ -513,6 +513,14 @@ vte_attach(device_t dev)
 	/* Tell the upper layer we support VLAN over-sized frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH	    
+	if ((error = ng_vte_tap_attach(sc)) != 0) {
+		device_printf(dev, "could not set ng_vte_tap(4).\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
+
 	error = bus_setup_intr(dev, sc->vte_irq, INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, vte_intr, sc, &sc->vte_intrhand);	    
 	if (error != 0) {
@@ -520,12 +528,6 @@ vte_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH	    
-	if ((error = ng_vte_tap_attach(sc)) != 0) {
-		device_printf(dev, "could not set ng_vte_tap(4).\n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */
 
 fail:
 	if (error != 0)
