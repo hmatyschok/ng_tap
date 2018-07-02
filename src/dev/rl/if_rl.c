@@ -879,6 +879,14 @@ rl_attach(device_t dev)
 	 */
 	ether_ifattach(ifp, eaddr);
 
+#ifdef NETGRAPH  
+	if ((error = ng_rl_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_rl_tap(4) \n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */	
+
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->rl_irq[0], INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, rl_intr, sc, &sc->rl_intrhand[0]);
@@ -887,13 +895,6 @@ rl_attach(device_t dev)
 		ether_ifdetach(ifp);
 	}
 	
-#ifdef NETGRAPH  
-	if ((error = ng_rl_tap_attach(sc)) != 0) {
-		device_printf(dev, "couldn't set up ng_rl_tap(4) \n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */
-
 fail:
 	if (error)
 		rl_detach(dev);
