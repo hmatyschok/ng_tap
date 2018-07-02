@@ -986,12 +986,15 @@ my_attach(device_t dev)
 
 	ether_ifattach(ifp, eaddr);
 
+#ifdef NETGRAPH
+	if ((error = ng_my_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_my_tap(4)\n");
+		goto detach_if;
+	}	
+#endif /* NETGRAPH */
+
 	error = bus_setup_intr(dev, sc->my_irq, INTR_TYPE_NET | INTR_MPSAFE,
 			       NULL, my_intr, sc, &sc->my_intrhand);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_my_tap_attach(sc);
-#endif /* NETGRAPH */
 	if (error) {
 		device_printf(dev, "couldn't set up irq\n");
 		goto detach_if;
@@ -1596,6 +1599,13 @@ my_init_locked(struct my_softc *sc)
 	 * Program the multicast filter, if necessary.
 	 */
 	my_setmulti(sc);
+
+#ifdef NETGRAPH 
+	if (sc->my_tap_hook != NULL) 
+		MY_SETBIT(sc, MY_TCRRCR, MY_SEP);
+	else
+		MY_CLRBIT(sc, MY_TCRRCR, ~MY_SEP);
+#endif /* NETGRAPH */
 
 	/*
 	 * Load the address of the RX list.
