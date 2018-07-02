@@ -1743,8 +1743,19 @@ msk_attach(device_t dev)
 	 * Must appear after the call to ether_ifattach() because
 	 * ether_ifattach() sets ifi_hdrlen to the default value.
 	 */
-        ifp->if_hdrlen = sizeof(struct ether_vlan_header);
-
+	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
+	
+#ifdef NETGRAPH  
+	MSK_IF_UNLOCK(sc_if);
+	if ((error = ng_msk_tap_attach(sc_if)) != 0) {
+		device_printf(sc_if->msk_if_dev, "attaching ng_msk_tap(4) failed\n");
+		ether_ifdetach(ifp);
+		MSK_IF_LOCK(sc_if);
+		error = ENXIO;
+		goto fail;
+	}	
+	MSK_IF_LOCK(sc_if);	
+#endif /* NETGRAPH */
 	/*
 	 * Do miibus setup.
 	 */
@@ -1758,12 +1769,6 @@ msk_attach(device_t dev)
 		error = ENXIO;
 		goto fail;
 	}
-
-#ifdef NETGRAPH  
-	if (error == 0) 
-		error = ng_msk_tap_attach(sc_if);
-#endif /* NETGRAPH */
-
 
 fail:
 	if (error != 0) {
@@ -2073,24 +2078,23 @@ msk_detach(device_t dev)
 	KASSERT(mtx_initialized(&sc_if->msk_softc->msk_mtx),
 	    ("msk mutex not initialized in msk_detach"));
 
-#ifdef NETGRAPH 
-	if (device_is_attached(dev)) 
-		ng_msk_tap_detach(sc_if);
-#endif /* NETGRAPH */	
-	MSK_IF_LOCK(sc_if);
-
 	ifp = sc_if->msk_ifp;
+	
 	if (device_is_attached(dev)) {
+#ifdef NETGRAPH
+		ng_msk_tap_detach(sc_if);
+#endif /* NETGRAPH */		
 		/* XXX */
 		sc_if->msk_flags |= MSK_FLAG_DETACH;
 		msk_stop(sc_if);
 		/* Can't hold locks while calling detach. */
-		MSK_IF_UNLOCK(sc_if);
 		callout_drain(&sc_if->msk_tick_ch);
-		if (ifp)
+		if (ifp != NULL)
 			ether_ifdetach(ifp);
-		MSK_IF_LOCK(sc_if);
 	}
+	
+	MSK_IF_LOCK(sc_if);
+
 
 	/*
 	 * We're generally called from mskc_detach() which is using
@@ -2110,7 +2114,7 @@ msk_detach(device_t dev)
 	sc = sc_if->msk_softc;
 	sc->msk_if[sc_if->msk_port] = NULL;
 	MSK_IF_UNLOCK(sc_if);
-	if (ifp)
+	if (ifp != NULL)
 		if_free(ifp);
 
 	return (0);
