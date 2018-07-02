@@ -28,6 +28,31 @@
  *	from: NetBSD: gem.c,v 1.21 2002/06/01 23:50:58 lukem Exp
  *	from: FreeBSD: if_gem.c 182060 2008-08-23 15:03:26Z marius
  */
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/dev/cas/if_cas.c 271824 2014-09-18 20:53:02Z glebius $");
@@ -88,6 +113,10 @@ __FBSDID("$FreeBSD: releng/11.1/sys/dev/cas/if_cas.c 271824 2014-09-18 20:53:02Z
 
 #include <dev/cas/if_casreg.h>
 #include <dev/cas/if_casvar.h>
+#ifdef NETGRAPH
+#include <dev/cas/ng_cas_tap.h>
+NG_TAP_MODULE(cas, cas_softc, NG_CAS_TAP_NODE_TYPE);
+#endif /* NETGRAPH */
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -160,7 +189,11 @@ static inline void cas_rxcompinit(struct cas_rx_comp *rxcomp);
 static u_int	cas_rxcompsize(u_int sz);
 static void	cas_rxdma_callback(void *xsc, bus_dma_segment_t *segs,
 		    int nsegs, int error);
+#ifdef NETGRAPH		    
+static void	cas_setladrf(struct cas_softc *sc, int);
+#else
 static void	cas_setladrf(struct cas_softc *sc);
+#endif /* ! NETGRAPH */
 static void	cas_start(struct ifnet *ifp);
 static void	cas_stop(struct ifnet *ifp);
 static void	cas_suspend(struct cas_softc *sc);
@@ -431,6 +464,15 @@ cas_attach(struct cas_softc *sc)
 	}
 	ifp->if_capenable = ifp->if_capabilities;
 
+#ifdef NETGRAPH
+	if ((error = ng_cas_tap_attach(sc)) != 0) {
+		device_printf(sc->cas_dev, 
+			"attaching ng_cas_tap(4) failed\n");
+		ether_ifdetach(ifp);
+		goto fail_rxmap;
+	}
+#endif /* NETGRAPH */
+
 	return (0);
 
 	/*
@@ -478,6 +520,9 @@ cas_detach(struct cas_softc *sc)
 	struct ifnet *ifp = sc->cas_ifp;
 	int i;
 
+#ifdef NETGRAPH
+	ng_cas_tap_detach(sc);
+#endif /* NETGRAPH */
 	ether_ifdetach(ifp);
 	CAS_LOCK(sc);
 	cas_stop(ifp);
@@ -1152,13 +1197,24 @@ cas_init_locked(struct cas_softc *sc)
 	/* step 12.  RX_MAC Configuration Register */
 	v = CAS_READ_4(sc, CAS_MAC_RX_CONF);
 	v &= ~(CAS_MAC_RX_CONF_STRPPAD | CAS_MAC_RX_CONF_EN);
+#ifdef NETGRAPH
+	if (sc->cas_tap_hook != NULL)
+		v &= ~CAS_MAC_RX_CONF_STRPFCS;
+	else
+		v |= CAS_MAC_RX_CONF_STRPFCS;
+#else
 	v |= CAS_MAC_RX_CONF_STRPFCS;
+#endif /* ! NETGRAPH */
 	sc->cas_mac_rxcfg = v;
 	/*
 	 * Clear the RX filter and reprogram it.  This will also set the
 	 * current RX MAC configuration and enable it.
 	 */
+#ifdef NETGRAPH
+	cas_setladrf(sc, 0);
+#else	 
 	cas_setladrf(sc);
+#endif /* ! NETGRAPH */
 
 	/* step 13.  TX_MAC Configuration Register */
 	v = CAS_READ_4(sc, CAS_MAC_TX_CONF);
@@ -1700,10 +1756,25 @@ cas_rint(struct cas_softc *sc)
 
 		if (__predict_false(
 		    (word4 & (CAS_RC4_BAD | CAS_RC4_LEN_MMATCH)) != 0)) {
-			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
+			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);		
+#ifdef NETGRAPH
+			if (sc->cas_tap_hook != NULL) {
+				if (__predict_false(
+					(word4 & (CAS_RC4_LEN_MMATCH)) != 0)) {
+					device_printf(sc->cas_dev,
+						"receive error: length field mism\n");
+					continue;
+				}	
+			} else {
+				device_printf(sc->cas_dev,
+					"receive error: CRC error\n");
+				continue;
+			}
+#else			
 			device_printf(sc->cas_dev,
 			    "receive error: CRC error\n");
 			continue;
+#endif /* ! NETGRAPH */
 		}
 
 		KASSERT(CAS_GET(word1, CAS_RC1_DATA_SIZE) == 0 ||
@@ -1756,7 +1827,11 @@ cas_rint(struct cas_softc *sc)
 					    CAS_RC4_TCP_CSUM));
 				/* Pass it on. */
 				CAS_UNLOCK(sc);
+#ifdef NETGRAPH
+				NG_TAP_INPUT(cas, sc, ifp, m);
+#else				
 				(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 				CAS_LOCK(sc);
 			} else
 				if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
@@ -1854,7 +1929,11 @@ cas_rint(struct cas_softc *sc)
 					    CAS_RC4_TCP_CSUM));
 				/* Pass it on. */
 				CAS_UNLOCK(sc);
+#ifdef NETGRAPH
+				NG_TAP_INPUT(cas, sc, ifp, m);
+#else				
 				(*ifp->if_input)(ifp, m);
+#endif /* ! NETGRAPH */
 				CAS_LOCK(sc);
 			} else
 				if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
@@ -2473,9 +2552,13 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if ((ifp->if_flags & IFF_UP) != 0) {
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0 &&
 			    ((ifp->if_flags ^ sc->cas_ifflags) &
-			    (IFF_ALLMULTI | IFF_PROMISC)) != 0)
+			    (IFF_ALLMULTI | IFF_PROMISC)) != 0) {
+#ifdef NETGRAPH
+				cas_setladrf(sc, 1);
+#else
 				cas_setladrf(sc);
-			else
+#endif /* ! NETGRAPH */
+			} else
 				cas_init_locked(sc);
 		} else if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
 			cas_stop(ifp);
@@ -2499,8 +2582,13 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		CAS_LOCK(sc);
-		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
+		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
+#ifdef NETGRAPH
+			cas_setladrf(sc, 1);
+#else
 			cas_setladrf(sc);
+#endif /* ! NETGRAPH */
+		}	
 		CAS_UNLOCK(sc);
 		break;
 	case SIOCSIFMTU:
@@ -2522,8 +2610,13 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	return (error);
 }
 
+#ifdef NETGRAPH
+static void
+cas_setladrf(struct cas_softc *sc, int pswitch)
+#else
 static void
 cas_setladrf(struct cas_softc *sc)
+#endif /* ! NETGRAPH */
 {
 	struct ifnet *ifp = sc->cas_ifp;
 	struct ifmultiaddr *inm;
@@ -2548,6 +2641,16 @@ cas_setladrf(struct cas_softc *sc)
 		    "cannot disable RX MAC or hash filter\n");
 
 	v &= ~(CAS_MAC_RX_CONF_PROMISC | CAS_MAC_RX_CONF_PGRP);
+	
+#ifdef NETGRAPH
+	if (pswitch != 0) {
+		if (sc->cas_tap_hook != NULL)
+			v &= ~CAS_MAC_RX_CONF_STRPFCS;
+		else
+			v |= CAS_MAC_RX_CONF_STRPFCS;
+	}
+#endif /* NETGRAPH */
+
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		v |= CAS_MAC_RX_CONF_PROMISC;
 		goto chipit;
