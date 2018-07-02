@@ -189,12 +189,12 @@ cas_attach(struct cas_softc *sc)
 	uint32_t v;
 
 	/* Set up ifnet structure. */
-	ifp = sc->sc_ifp = if_alloc(IFT_ETHER);
+	ifp = sc->cas_ifp = if_alloc(IFT_ETHER);
 	if (ifp == NULL)
 		return (ENOSPC);
 	ifp->if_softc = sc;
-	if_initname(ifp, device_get_name(sc->sc_dev),
-	    device_get_unit(sc->sc_dev));
+	if_initname(ifp, device_get_name(sc->cas_dev),
+	    device_get_unit(sc->cas_dev));
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = cas_start;
 	ifp->if_ioctl = cas_ioctl;
@@ -203,53 +203,53 @@ cas_attach(struct cas_softc *sc)
 	ifp->if_snd.ifq_drv_maxlen = CAS_TXQUEUELEN;
 	IFQ_SET_READY(&ifp->if_snd);
 
-	callout_init_mtx(&sc->sc_tick_ch, &sc->sc_mtx, 0);
-	callout_init_mtx(&sc->sc_rx_ch, &sc->sc_mtx, 0);
+	callout_init_mtx(&sc->cas_tick_ch, &sc->cas_mtx, 0);
+	callout_init_mtx(&sc->cas_rx_ch, &sc->cas_mtx, 0);
 	/* Create local taskq. */
-	TASK_INIT(&sc->sc_intr_task, 0, cas_intr_task, sc);
-	TASK_INIT(&sc->sc_tx_task, 1, cas_tx_task, ifp);
-	sc->sc_tq = taskqueue_create_fast("cas_taskq", M_WAITOK,
-	    taskqueue_thread_enqueue, &sc->sc_tq);
-	if (sc->sc_tq == NULL) {
-		device_printf(sc->sc_dev, "could not create taskqueue\n");
+	TASK_INIT(&sc->cas_intr_task, 0, cas_intr_task, sc);
+	TASK_INIT(&sc->cas_tx_task, 1, cas_tx_task, ifp);
+	sc->cas_tq = taskqueue_create_fast("cas_taskq", M_WAITOK,
+	    taskqueue_thread_enqueue, &sc->cas_tq);
+	if (sc->cas_tq == NULL) {
+		device_printf(sc->cas_dev, "could not create taskqueue\n");
 		error = ENXIO;
 		goto fail_ifnet;
 	}
-	error = taskqueue_start_threads(&sc->sc_tq, 1, PI_NET, "%s taskq",
-	    device_get_nameunit(sc->sc_dev));
+	error = taskqueue_start_threads(&sc->cas_tq, 1, PI_NET, "%s taskq",
+	    device_get_nameunit(sc->cas_dev));
 	if (error != 0) {
-		device_printf(sc->sc_dev, "could not start threads\n");
+		device_printf(sc->cas_dev, "could not start threads\n");
 		goto fail_taskq;
 	}
 
 	/* Make sure the chip is stopped. */
 	cas_reset(sc);
 
-	error = bus_dma_tag_create(bus_get_dma_tag(sc->sc_dev), 1, 0,
+	error = bus_dma_tag_create(bus_get_dma_tag(sc->cas_dev), 1, 0,
 	    BUS_SPACE_MAXADDR, BUS_SPACE_MAXADDR, NULL, NULL,
 	    BUS_SPACE_MAXSIZE, 0, BUS_SPACE_MAXSIZE, 0, NULL, NULL,
-	    &sc->sc_pdmatag);
+	    &sc->cas_pdmatag);
 	if (error != 0)
 		goto fail_taskq;
 
-	error = bus_dma_tag_create(sc->sc_pdmatag, 1, 0,
+	error = bus_dma_tag_create(sc->cas_pdmatag, 1, 0,
 	    BUS_SPACE_MAXADDR, BUS_SPACE_MAXADDR, NULL, NULL,
-	    CAS_PAGE_SIZE, 1, CAS_PAGE_SIZE, 0, NULL, NULL, &sc->sc_rdmatag);
+	    CAS_PAGE_SIZE, 1, CAS_PAGE_SIZE, 0, NULL, NULL, &sc->cas_rdmatag);
 	if (error != 0)
 		goto fail_ptag;
 
-	error = bus_dma_tag_create(sc->sc_pdmatag, 1, 0,
+	error = bus_dma_tag_create(sc->cas_pdmatag, 1, 0,
 	    BUS_SPACE_MAXADDR, BUS_SPACE_MAXADDR, NULL, NULL,
 	    MCLBYTES * CAS_NTXSEGS, CAS_NTXSEGS, MCLBYTES,
-	    BUS_DMA_ALLOCNOW, NULL, NULL, &sc->sc_tdmatag);
+	    BUS_DMA_ALLOCNOW, NULL, NULL, &sc->cas_tdmatag);
 	if (error != 0)
 		goto fail_rtag;
 
-	error = bus_dma_tag_create(sc->sc_pdmatag, CAS_TX_DESC_ALIGN, 0,
+	error = bus_dma_tag_create(sc->cas_pdmatag, CAS_TX_DESC_ALIGN, 0,
 	    BUS_SPACE_MAXADDR, BUS_SPACE_MAXADDR, NULL, NULL,
 	    sizeof(struct cas_control_data), 1,
 	    sizeof(struct cas_control_data), 0,
-	    NULL, NULL, &sc->sc_cdmatag);
+	    NULL, NULL, &sc->cas_cdmatag);
 	if (error != 0)
 		goto fail_ttag;
 
@@ -257,20 +257,20 @@ cas_attach(struct cas_softc *sc)
 	 * Allocate the control data structures, create and load the
 	 * DMA map for it.
 	 */
-	if ((error = bus_dmamem_alloc(sc->sc_cdmatag,
-	    (void **)&sc->sc_control_data,
+	if ((error = bus_dmamem_alloc(sc->cas_cdmatag,
+	    (void **)&sc->cas_control_data,
 	    BUS_DMA_WAITOK | BUS_DMA_COHERENT | BUS_DMA_ZERO,
-	    &sc->sc_cddmamap)) != 0) {
-		device_printf(sc->sc_dev,
+	    &sc->cas_cddmamap)) != 0) {
+		device_printf(sc->cas_dev,
 		    "unable to allocate control data, error = %d\n", error);
 		goto fail_ctag;
 	}
 
-	sc->sc_cddma = 0;
-	if ((error = bus_dmamap_load(sc->sc_cdmatag, sc->sc_cddmamap,
-	    sc->sc_control_data, sizeof(struct cas_control_data),
-	    cas_cddma_callback, sc, 0)) != 0 || sc->sc_cddma == 0) {
-		device_printf(sc->sc_dev,
+	sc->cas_cddma = 0;
+	if ((error = bus_dmamap_load(sc->cas_cdmatag, sc->cas_cddmamap,
+	    sc->cas_control_data, sizeof(struct cas_control_data),
+	    cas_cddma_callback, sc, 0)) != 0 || sc->cas_cddma == 0) {
+		device_printf(sc->cas_dev,
 		    "unable to load control data DMA map, error = %d\n",
 		    error);
 		goto fail_cmem;
@@ -279,25 +279,25 @@ cas_attach(struct cas_softc *sc)
 	/*
 	 * Initialize the transmit job descriptors.
 	 */
-	STAILQ_INIT(&sc->sc_txfreeq);
-	STAILQ_INIT(&sc->sc_txdirtyq);
+	STAILQ_INIT(&sc->cas_txfreeq);
+	STAILQ_INIT(&sc->cas_txdirtyq);
 
 	/*
 	 * Create the transmit buffer DMA maps.
 	 */
 	error = ENOMEM;
 	for (i = 0; i < CAS_TXQUEUELEN; i++) {
-		txs = &sc->sc_txsoft[i];
+		txs = &sc->cas_txsoft[i];
 		txs->txs_mbuf = NULL;
 		txs->txs_ndescs = 0;
-		if ((error = bus_dmamap_create(sc->sc_tdmatag, 0,
+		if ((error = bus_dmamap_create(sc->cas_tdmatag, 0,
 		    &txs->txs_dmamap)) != 0) {
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "unable to create TX DMA map %d, error = %d\n",
 			    i, error);
 			goto fail_txd;
 		}
-		STAILQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
+		STAILQ_INSERT_TAIL(&sc->cas_txfreeq, txs, txs_q);
 	}
 
 	/*
@@ -305,29 +305,29 @@ cas_attach(struct cas_softc *sc)
 	 * for them.
 	 */
 	for (i = 0; i < CAS_NRXDESC; i++) {
-		if ((error = bus_dmamem_alloc(sc->sc_rdmatag,
-		    &sc->sc_rxdsoft[i].rxds_buf, BUS_DMA_WAITOK,
-		    &sc->sc_rxdsoft[i].rxds_dmamap)) != 0) {
-			device_printf(sc->sc_dev,
+		if ((error = bus_dmamem_alloc(sc->cas_rdmatag,
+		    &sc->cas_rxdsoft[i].rxds_buf, BUS_DMA_WAITOK,
+		    &sc->cas_rxdsoft[i].rxds_dmamap)) != 0) {
+			device_printf(sc->cas_dev,
 			    "unable to allocate RX buffer %d, error = %d\n",
 			    i, error);
 			goto fail_rxmem;
 		}
 
-		sc->sc_rxdptr = i;
-		sc->sc_rxdsoft[i].rxds_paddr = 0;
-		if ((error = bus_dmamap_load(sc->sc_rdmatag,
-		    sc->sc_rxdsoft[i].rxds_dmamap, sc->sc_rxdsoft[i].rxds_buf,
+		sc->cas_rxdptr = i;
+		sc->cas_rxdsoft[i].rxds_paddr = 0;
+		if ((error = bus_dmamap_load(sc->cas_rdmatag,
+		    sc->cas_rxdsoft[i].rxds_dmamap, sc->cas_rxdsoft[i].rxds_buf,
 		    CAS_PAGE_SIZE, cas_rxdma_callback, sc, 0)) != 0 ||
-		    sc->sc_rxdsoft[i].rxds_paddr == 0) {
-			device_printf(sc->sc_dev,
+		    sc->cas_rxdsoft[i].rxds_paddr == 0) {
+			device_printf(sc->cas_dev,
 			    "unable to load RX DMA map %d, error = %d\n",
 			    i, error);
 			goto fail_rxmap;
 		}
 	}
 
-	if ((sc->sc_flags & CAS_SERDES) == 0) {
+	if ((sc->cas_flags & CAS_SERDES) == 0) {
 		CAS_WRITE_4(sc, CAS_PCS_DATAPATH, CAS_PCS_DATAPATH_MII);
 		CAS_BARRIER(sc, CAS_PCS_DATAPATH, 4,
 		    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
@@ -343,7 +343,7 @@ cas_attach(struct cas_softc *sc)
 			CAS_BARRIER(sc, CAS_MIF_CONF, 4,
 			    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 			/* Enable/unfreeze the GMII pins of Saturn. */
-			if (sc->sc_variant == CAS_SATURN) {
+			if (sc->cas_variant == CAS_SATURN) {
 				CAS_WRITE_4(sc, CAS_SATURN_PCFG,
 				    CAS_READ_4(sc, CAS_SATURN_PCFG) &
 				    ~CAS_SATURN_PCFG_FSI);
@@ -352,7 +352,7 @@ cas_attach(struct cas_softc *sc)
 				    BUS_SPACE_BARRIER_WRITE);
 				DELAY(10000);
 			}
-			error = mii_attach(sc->sc_dev, &sc->sc_miibus, ifp,
+			error = mii_attach(sc->cas_dev, &sc->cas_miibus, ifp,
 			    cas_mediachange, cas_mediastatus, BMSR_DEFCAPMASK,
 			    MII_PHY_ANY, MII_OFFSET_ANY, MIIF_DOPAUSE);
 		}
@@ -365,7 +365,7 @@ cas_attach(struct cas_softc *sc)
 			CAS_BARRIER(sc, CAS_MIF_CONF, 4,
 			    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 			/* Freeze the GMII pins of Saturn for saving power. */
-			if (sc->sc_variant == CAS_SATURN) {
+			if (sc->cas_variant == CAS_SATURN) {
 				CAS_WRITE_4(sc, CAS_SATURN_PCFG,
 				    CAS_READ_4(sc, CAS_SATURN_PCFG) |
 				    CAS_SATURN_PCFG_FSI);
@@ -374,7 +374,7 @@ cas_attach(struct cas_softc *sc)
 				    BUS_SPACE_BARRIER_WRITE);
 				DELAY(10000);
 			}
-			error = mii_attach(sc->sc_dev, &sc->sc_miibus, ifp,
+			error = mii_attach(sc->cas_dev, &sc->cas_miibus, ifp,
 			    cas_mediachange, cas_mediastatus, BMSR_DEFCAPMASK,
 			    MII_PHY_ANY, MII_OFFSET_ANY, MIIF_DOPAUSE);
 		}
@@ -385,7 +385,7 @@ cas_attach(struct cas_softc *sc)
 		CAS_WRITE_4(sc, CAS_PCS_DATAPATH, CAS_PCS_DATAPATH_SERDES);
 		CAS_BARRIER(sc, CAS_PCS_DATAPATH, 4, BUS_SPACE_BARRIER_WRITE);
 		/* Enable/unfreeze the SERDES pins of Saturn. */
-		if (sc->sc_variant == CAS_SATURN) {
+		if (sc->cas_variant == CAS_SATURN) {
 			CAS_WRITE_4(sc, CAS_SATURN_PCFG, 0);
 			CAS_BARRIER(sc, CAS_SATURN_PCFG, 4,
 			    BUS_SPACE_BARRIER_WRITE);
@@ -396,15 +396,15 @@ cas_attach(struct cas_softc *sc)
 		CAS_WRITE_4(sc, CAS_PCS_CONF, CAS_PCS_CONF_EN);
 		CAS_BARRIER(sc, CAS_PCS_CONF, 4,
 		    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
-		error = mii_attach(sc->sc_dev, &sc->sc_miibus, ifp,
+		error = mii_attach(sc->cas_dev, &sc->cas_miibus, ifp,
 		    cas_mediachange, cas_mediastatus, BMSR_DEFCAPMASK,
 		    CAS_PHYAD_EXTERNAL, MII_OFFSET_ANY, MIIF_DOPAUSE);
 	}
 	if (error != 0) {
-		device_printf(sc->sc_dev, "attaching PHYs failed\n");
+		device_printf(sc->cas_dev, "attaching PHYs failed\n");
 		goto fail_rxmap;
 	}
-	sc->sc_mii = device_get_softc(sc->sc_miibus);
+	sc->cas_mii = device_get_softc(sc->cas_miibus);
 
 	/*
 	 * From this point forward, the attachment cannot fail.  A failure
@@ -414,18 +414,18 @@ cas_attach(struct cas_softc *sc)
 
 	/* Announce FIFO sizes. */
 	v = CAS_READ_4(sc, CAS_TX_FIFO_SIZE);
-	device_printf(sc->sc_dev, "%ukB RX FIFO, %ukB TX FIFO\n",
+	device_printf(sc->cas_dev, "%ukB RX FIFO, %ukB TX FIFO\n",
 	    CAS_RX_FIFO_SIZE / 1024, v / 16);
 
 	/* Attach the interface. */
-	ether_ifattach(ifp, sc->sc_enaddr);
+	ether_ifattach(ifp, sc->cas_enaddr);
 
 	/*
 	 * Tell the upper layer(s) we support long frames/checksum offloads.
 	 */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
-	if ((sc->sc_flags & CAS_NO_CSUM) == 0) {
+	if ((sc->cas_flags & CAS_NO_CSUM) == 0) {
 		ifp->if_capabilities |= IFCAP_HWCSUM;
 		ifp->if_hwassist = CAS_CSUM_FEATURES;
 	}
@@ -439,34 +439,34 @@ cas_attach(struct cas_softc *sc)
 	 */
  fail_rxmap:
 	for (i = 0; i < CAS_NRXDESC; i++)
-		if (sc->sc_rxdsoft[i].rxds_paddr != 0)
-			bus_dmamap_unload(sc->sc_rdmatag,
-			    sc->sc_rxdsoft[i].rxds_dmamap);
+		if (sc->cas_rxdsoft[i].rxds_paddr != 0)
+			bus_dmamap_unload(sc->cas_rdmatag,
+			    sc->cas_rxdsoft[i].rxds_dmamap);
  fail_rxmem:
 	for (i = 0; i < CAS_NRXDESC; i++)
-		if (sc->sc_rxdsoft[i].rxds_buf != NULL)
-			bus_dmamem_free(sc->sc_rdmatag,
-			    sc->sc_rxdsoft[i].rxds_buf,
-			    sc->sc_rxdsoft[i].rxds_dmamap);
+		if (sc->cas_rxdsoft[i].rxds_buf != NULL)
+			bus_dmamem_free(sc->cas_rdmatag,
+			    sc->cas_rxdsoft[i].rxds_buf,
+			    sc->cas_rxdsoft[i].rxds_dmamap);
  fail_txd:
 	for (i = 0; i < CAS_TXQUEUELEN; i++)
-		if (sc->sc_txsoft[i].txs_dmamap != NULL)
-			bus_dmamap_destroy(sc->sc_tdmatag,
-			    sc->sc_txsoft[i].txs_dmamap);
-	bus_dmamap_unload(sc->sc_cdmatag, sc->sc_cddmamap);
+		if (sc->cas_txsoft[i].txs_dmamap != NULL)
+			bus_dmamap_destroy(sc->cas_tdmatag,
+			    sc->cas_txsoft[i].txs_dmamap);
+	bus_dmamap_unload(sc->cas_cdmatag, sc->cas_cddmamap);
  fail_cmem:
-	bus_dmamem_free(sc->sc_cdmatag, sc->sc_control_data,
-	    sc->sc_cddmamap);
+	bus_dmamem_free(sc->cas_cdmatag, sc->cas_control_data,
+	    sc->cas_cddmamap);
  fail_ctag:
-	bus_dma_tag_destroy(sc->sc_cdmatag);
+	bus_dma_tag_destroy(sc->cas_cdmatag);
  fail_ttag:
-	bus_dma_tag_destroy(sc->sc_tdmatag);
+	bus_dma_tag_destroy(sc->cas_tdmatag);
  fail_rtag:
-	bus_dma_tag_destroy(sc->sc_rdmatag);
+	bus_dma_tag_destroy(sc->cas_rdmatag);
  fail_ptag:
-	bus_dma_tag_destroy(sc->sc_pdmatag);
+	bus_dma_tag_destroy(sc->cas_pdmatag);
  fail_taskq:
-	taskqueue_free(sc->sc_tq);
+	taskqueue_free(sc->cas_tq);
  fail_ifnet:
 	if_free(ifp);
 	return (error);
@@ -475,53 +475,53 @@ cas_attach(struct cas_softc *sc)
 static void
 cas_detach(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	int i;
 
 	ether_ifdetach(ifp);
 	CAS_LOCK(sc);
 	cas_stop(ifp);
 	CAS_UNLOCK(sc);
-	callout_drain(&sc->sc_tick_ch);
-	callout_drain(&sc->sc_rx_ch);
-	taskqueue_drain(sc->sc_tq, &sc->sc_intr_task);
-	taskqueue_drain(sc->sc_tq, &sc->sc_tx_task);
+	callout_drain(&sc->cas_tick_ch);
+	callout_drain(&sc->cas_rx_ch);
+	taskqueue_drain(sc->cas_tq, &sc->cas_intr_task);
+	taskqueue_drain(sc->cas_tq, &sc->cas_tx_task);
 	if_free(ifp);
-	taskqueue_free(sc->sc_tq);
-	device_delete_child(sc->sc_dev, sc->sc_miibus);
+	taskqueue_free(sc->cas_tq);
+	device_delete_child(sc->cas_dev, sc->cas_miibus);
 
 	for (i = 0; i < CAS_NRXDESC; i++)
-		if (sc->sc_rxdsoft[i].rxds_dmamap != NULL)
-			bus_dmamap_sync(sc->sc_rdmatag,
-			    sc->sc_rxdsoft[i].rxds_dmamap,
+		if (sc->cas_rxdsoft[i].rxds_dmamap != NULL)
+			bus_dmamap_sync(sc->cas_rdmatag,
+			    sc->cas_rxdsoft[i].rxds_dmamap,
 			    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	for (i = 0; i < CAS_NRXDESC; i++)
-		if (sc->sc_rxdsoft[i].rxds_paddr != 0)
-			bus_dmamap_unload(sc->sc_rdmatag,
-			    sc->sc_rxdsoft[i].rxds_dmamap);
+		if (sc->cas_rxdsoft[i].rxds_paddr != 0)
+			bus_dmamap_unload(sc->cas_rdmatag,
+			    sc->cas_rxdsoft[i].rxds_dmamap);
 	for (i = 0; i < CAS_NRXDESC; i++)
-		if (sc->sc_rxdsoft[i].rxds_buf != NULL)
-			bus_dmamem_free(sc->sc_rdmatag,
-			    sc->sc_rxdsoft[i].rxds_buf,
-			    sc->sc_rxdsoft[i].rxds_dmamap);
+		if (sc->cas_rxdsoft[i].rxds_buf != NULL)
+			bus_dmamem_free(sc->cas_rdmatag,
+			    sc->cas_rxdsoft[i].rxds_buf,
+			    sc->cas_rxdsoft[i].rxds_dmamap);
 	for (i = 0; i < CAS_TXQUEUELEN; i++)
-		if (sc->sc_txsoft[i].txs_dmamap != NULL)
-			bus_dmamap_destroy(sc->sc_tdmatag,
-			    sc->sc_txsoft[i].txs_dmamap);
+		if (sc->cas_txsoft[i].txs_dmamap != NULL)
+			bus_dmamap_destroy(sc->cas_tdmatag,
+			    sc->cas_txsoft[i].txs_dmamap);
 	CAS_CDSYNC(sc, BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
-	bus_dmamap_unload(sc->sc_cdmatag, sc->sc_cddmamap);
-	bus_dmamem_free(sc->sc_cdmatag, sc->sc_control_data,
-	    sc->sc_cddmamap);
-	bus_dma_tag_destroy(sc->sc_cdmatag);
-	bus_dma_tag_destroy(sc->sc_tdmatag);
-	bus_dma_tag_destroy(sc->sc_rdmatag);
-	bus_dma_tag_destroy(sc->sc_pdmatag);
+	bus_dmamap_unload(sc->cas_cdmatag, sc->cas_cddmamap);
+	bus_dmamem_free(sc->cas_cdmatag, sc->cas_control_data,
+	    sc->cas_cddmamap);
+	bus_dma_tag_destroy(sc->cas_cdmatag);
+	bus_dma_tag_destroy(sc->cas_tdmatag);
+	bus_dma_tag_destroy(sc->cas_rdmatag);
+	bus_dma_tag_destroy(sc->cas_pdmatag);
 }
 
 static void
 cas_suspend(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 
 	CAS_LOCK(sc);
 	cas_stop(ifp);
@@ -531,14 +531,14 @@ cas_suspend(struct cas_softc *sc)
 static void
 cas_resume(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 
 	CAS_LOCK(sc);
 	/*
 	 * On resume all registers have to be initialized again like
 	 * after power-on.
 	 */
-	sc->sc_flags &= ~CAS_INITED;
+	sc->cas_flags &= ~CAS_INITED;
 	if (ifp->if_flags & IFF_UP)
 		cas_init_locked(sc);
 	CAS_UNLOCK(sc);
@@ -615,7 +615,7 @@ cas_cddma_callback(void *xsc, bus_dma_segment_t *segs, int nsegs, int error)
 		return;
 	if (nsegs != 1)
 		panic("%s: bad control buffer segment count", __func__);
-	sc->sc_cddma = segs[0].ds_addr;
+	sc->cas_cddma = segs[0].ds_addr;
 }
 
 static void
@@ -627,14 +627,14 @@ cas_rxdma_callback(void *xsc, bus_dma_segment_t *segs, int nsegs, int error)
 		return;
 	if (nsegs != 1)
 		panic("%s: bad RX buffer segment count", __func__);
-	sc->sc_rxdsoft[sc->sc_rxdptr].rxds_paddr = segs[0].ds_addr;
+	sc->cas_rxdsoft[sc->cas_rxdptr].rxds_paddr = segs[0].ds_addr;
 }
 
 static void
 cas_tick(void *arg)
 {
 	struct cas_softc *sc = arg;
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	uint32_t v;
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
@@ -667,14 +667,14 @@ cas_tick(void *arg)
 	CAS_WRITE_4(sc, CAS_MAC_RX_CRC_ERR_CNT, 0);
 	CAS_WRITE_4(sc, CAS_MAC_RX_CODE_VIOL, 0);
 
-	mii_tick(sc->sc_mii);
+	mii_tick(sc->cas_mii);
 
-	if (sc->sc_txfree != CAS_MAXTXFREE)
+	if (sc->cas_txfree != CAS_MAXTXFREE)
 		cas_tint(sc);
 
 	cas_watchdog(sc);
 
-	callout_reset(&sc->sc_tick_ch, hz, cas_tick, sc);
+	callout_reset(&sc->cas_tick_ch, hz, cas_tick, sc);
 }
 
 static int
@@ -696,7 +696,7 @@ cas_reset(struct cas_softc *sc)
 {
 
 #ifdef CAS_DEBUG
-	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->sc_dev), __func__);
+	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->cas_dev), __func__);
 #endif
 	/* Disable all interrupts in order to avoid spurious ones. */
 	CAS_WRITE_4(sc, CAS_INTMASK, 0xffffffff);
@@ -709,12 +709,12 @@ cas_reset(struct cas_softc *sc)
 	 * when using the SERDES.
 	 */
 	CAS_WRITE_4(sc, CAS_RESET, CAS_RESET_RX | CAS_RESET_TX |
-	    ((sc->sc_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
+	    ((sc->cas_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
 	CAS_BARRIER(sc, CAS_RESET, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	DELAY(3000);
 	if (!cas_bitwait(sc, CAS_RESET, CAS_RESET_RX | CAS_RESET_TX, 0))
-		device_printf(sc->sc_dev, "cannot reset device\n");
+		device_printf(sc->cas_dev, "cannot reset device\n");
 }
 
 static void
@@ -724,11 +724,11 @@ cas_stop(struct ifnet *ifp)
 	struct cas_txsoft *txs;
 
 #ifdef CAS_DEBUG
-	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->sc_dev), __func__);
+	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->cas_dev), __func__);
 #endif
 
-	callout_stop(&sc->sc_tick_ch);
-	callout_stop(&sc->sc_rx_ch);
+	callout_stop(&sc->cas_tick_ch);
+	callout_stop(&sc->cas_rx_ch);
 
 	/* Disable all interrupts in order to avoid spurious ones. */
 	CAS_WRITE_4(sc, CAS_INTMASK, 0xffffffff);
@@ -739,26 +739,26 @@ cas_stop(struct ifnet *ifp)
 	/*
 	 * Release any queued transmit buffers.
 	 */
-	while ((txs = STAILQ_FIRST(&sc->sc_txdirtyq)) != NULL) {
-		STAILQ_REMOVE_HEAD(&sc->sc_txdirtyq, txs_q);
+	while ((txs = STAILQ_FIRST(&sc->cas_txdirtyq)) != NULL) {
+		STAILQ_REMOVE_HEAD(&sc->cas_txdirtyq, txs_q);
 		if (txs->txs_ndescs != 0) {
-			bus_dmamap_sync(sc->sc_tdmatag, txs->txs_dmamap,
+			bus_dmamap_sync(sc->cas_tdmatag, txs->txs_dmamap,
 			    BUS_DMASYNC_POSTWRITE);
-			bus_dmamap_unload(sc->sc_tdmatag, txs->txs_dmamap);
+			bus_dmamap_unload(sc->cas_tdmatag, txs->txs_dmamap);
 			if (txs->txs_mbuf != NULL) {
 				m_freem(txs->txs_mbuf);
 				txs->txs_mbuf = NULL;
 			}
 		}
-		STAILQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
+		STAILQ_INSERT_TAIL(&sc->cas_txfreeq, txs, txs_q);
 	}
 
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
 	ifp->if_drv_flags &= ~(IFF_DRV_RUNNING | IFF_DRV_OACTIVE);
-	sc->sc_flags &= ~CAS_LINK;
-	sc->sc_wdog_timer = 0;
+	sc->cas_flags &= ~CAS_LINK;
+	sc->cas_wdog_timer = 0;
 }
 
 static int
@@ -774,15 +774,15 @@ cas_reset_rx(struct cas_softc *sc)
 	CAS_BARRIER(sc, CAS_RX_CONF, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	if (!cas_bitwait(sc, CAS_RX_CONF, CAS_RX_CONF_RXDMA_EN, 0))
-		device_printf(sc->sc_dev, "cannot disable RX DMA\n");
+		device_printf(sc->cas_dev, "cannot disable RX DMA\n");
 
 	/* Finally, reset the ERX. */
 	CAS_WRITE_4(sc, CAS_RESET, CAS_RESET_RX |
-	    ((sc->sc_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
+	    ((sc->cas_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
 	CAS_BARRIER(sc, CAS_RESET, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	if (!cas_bitwait(sc, CAS_RESET, CAS_RESET_RX, 0)) {
-		device_printf(sc->sc_dev, "cannot reset receiver\n");
+		device_printf(sc->cas_dev, "cannot reset receiver\n");
 		return (1);
 	}
 	return (0);
@@ -801,15 +801,15 @@ cas_reset_tx(struct cas_softc *sc)
 	CAS_BARRIER(sc, CAS_TX_CONF, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	if (!cas_bitwait(sc, CAS_TX_CONF, CAS_TX_CONF_TXDMA_EN, 0))
-		device_printf(sc->sc_dev, "cannot disable TX DMA\n");
+		device_printf(sc->cas_dev, "cannot disable TX DMA\n");
 
 	/* Finally, reset the ETX. */
 	CAS_WRITE_4(sc, CAS_RESET, CAS_RESET_TX |
-	    ((sc->sc_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
+	    ((sc->cas_flags & CAS_SERDES) != 0 ? CAS_RESET_PCS_DIS : 0));
 	CAS_BARRIER(sc, CAS_RESET, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	if (!cas_bitwait(sc, CAS_RESET, CAS_RESET_TX, 0)) {
-		device_printf(sc->sc_dev, "cannot reset transmitter\n");
+		device_printf(sc->cas_dev, "cannot reset transmitter\n");
 		return (1);
 	}
 	return (0);
@@ -826,7 +826,7 @@ cas_disable_rx(struct cas_softc *sc)
 	if (cas_bitwait(sc, CAS_MAC_RX_CONF, CAS_MAC_RX_CONF_EN, 0))
 		return (1);
 	if (bootverbose)
-		device_printf(sc->sc_dev, "cannot disable RX MAC\n");
+		device_printf(sc->cas_dev, "cannot disable RX MAC\n");
 	return (0);
 }
 
@@ -841,7 +841,7 @@ cas_disable_tx(struct cas_softc *sc)
 	if (cas_bitwait(sc, CAS_MAC_TX_CONF, CAS_MAC_TX_CONF_EN, 0))
 		return (1);
 	if (bootverbose)
-		device_printf(sc->sc_dev, "cannot disable TX MAC\n");
+		device_printf(sc->cas_dev, "cannot disable TX MAC\n");
 	return (0);
 }
 
@@ -867,19 +867,19 @@ cas_meminit(struct cas_softc *sc)
 	 * Initialize the transmit descriptor ring.
 	 */
 	for (i = 0; i < CAS_NTXDESC; i++) {
-		sc->sc_txdescs[i].cd_flags = 0;
-		sc->sc_txdescs[i].cd_buf_ptr = 0;
+		sc->cas_txdescs[i].cd_flags = 0;
+		sc->cas_txdescs[i].cd_buf_ptr = 0;
 	}
-	sc->sc_txfree = CAS_MAXTXFREE;
-	sc->sc_txnext = 0;
-	sc->sc_txwin = 0;
+	sc->cas_txfree = CAS_MAXTXFREE;
+	sc->cas_txnext = 0;
+	sc->cas_txwin = 0;
 
 	/*
 	 * Initialize the receive completion ring.
 	 */
 	for (i = 0; i < CAS_NRXCOMP; i++)
-		cas_rxcompinit(&sc->sc_rxcomps[i]);
-	sc->sc_rxcptr = 0;
+		cas_rxcompinit(&sc->cas_rxcomps[i]);
+	sc->cas_rxcptr = 0;
 
 	/*
 	 * Initialize the first receive descriptor ring.  We leave
@@ -887,7 +887,7 @@ cas_meminit(struct cas_softc *sc)
 	 */
 	for (i = 0; i < CAS_NRXDESC; i++)
 		CAS_INIT_RXDESC(sc, i, i);
-	sc->sc_rxdptr = 0;
+	sc->cas_rxdptr = 0;
 
 	CAS_CDSYNC(sc, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 }
@@ -967,7 +967,7 @@ cas_init(void *xsc)
 static void
 cas_init_locked(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	uint32_t v;
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
@@ -976,7 +976,7 @@ cas_init_locked(struct cas_softc *sc)
 		return;
 
 #ifdef CAS_DEBUG
-	CTR2(KTR_CAS, "%s: %s: calling stop", device_get_name(sc->sc_dev),
+	CTR2(KTR_CAS, "%s: %s: calling stop", device_get_name(sc->cas_dev),
 	    __func__);
 #endif
 	/*
@@ -990,11 +990,11 @@ cas_init_locked(struct cas_softc *sc)
 	cas_stop(ifp);
 	cas_reset(sc);
 #ifdef CAS_DEBUG
-	CTR2(KTR_CAS, "%s: %s: restarting", device_get_name(sc->sc_dev),
+	CTR2(KTR_CAS, "%s: %s: restarting", device_get_name(sc->cas_dev),
 	    __func__);
 #endif
 
-	if ((sc->sc_flags & CAS_SERDES) == 0)
+	if ((sc->cas_flags & CAS_SERDES) == 0)
 		/* Re-initialize the MIF. */
 		cas_mifinit(sc);
 
@@ -1022,7 +1022,7 @@ cas_init_locked(struct cas_softc *sc)
 	CAS_WRITE_4(sc, CAS_RX_DESC_BASE_LO,
 	    CAS_CDRXDADDR(sc, 0) & 0xffffffff);
 
-	if ((sc->sc_flags & CAS_REG_PLUS) != 0) {
+	if ((sc->cas_flags & CAS_REG_PLUS) != 0) {
 		CAS_WRITE_4(sc, CAS_RX_DESC2_BASE_HI,
 		    (((uint64_t)CAS_CDRXD2ADDR(sc, 0)) >> 32));
 		CAS_WRITE_4(sc, CAS_RX_DESC2_BASE_LO,
@@ -1033,7 +1033,7 @@ cas_init_locked(struct cas_softc *sc)
 	CTR5(KTR_CAS,
 	    "loading TXDR %lx, RXCR %lx, RXDR %lx, RXD2R %lx, cddma %lx",
 	    CAS_CDTXDADDR(sc, 0), CAS_CDRXCADDR(sc, 0), CAS_CDRXDADDR(sc, 0),
-	    CAS_CDRXD2ADDR(sc, 0), sc->sc_cddma);
+	    CAS_CDRXD2ADDR(sc, 0), sc->cas_cddma);
 #endif
 
 	/* step 8.  Global Configuration & Interrupt Masks */
@@ -1049,7 +1049,7 @@ cas_init_locked(struct cas_softc *sc)
 	 */
 	CAS_WRITE_4(sc, CAS_INF_BURST,
 #if !defined(__sparc64__)
-	    (sc->sc_flags & CAS_TABORT) == 0 ? CAS_INF_BURST_EN :
+	    (sc->cas_flags & CAS_TABORT) == 0 ? CAS_INF_BURST_EN :
 #endif
 	    0);
 
@@ -1104,7 +1104,7 @@ cas_init_locked(struct cas_softc *sc)
 	 */
 	v = cas_rxcompsize(CAS_NRXCOMP) << CAS_RX_CONF_COMP_SHFT;
 	v |= cas_descsize(CAS_NRXDESC) << CAS_RX_CONF_DESC_SHFT;
-	if ((sc->sc_flags & CAS_REG_PLUS) != 0)
+	if ((sc->cas_flags & CAS_REG_PLUS) != 0)
 		v |= cas_descsize(CAS_NRXDESC2) << CAS_RX_CONF_DESC2_SHFT;
 	CAS_WRITE_4(sc, CAS_RX_CONF,
 	    v | (ETHER_ALIGN << CAS_RX_CONF_SOFF_SHFT));
@@ -1153,7 +1153,7 @@ cas_init_locked(struct cas_softc *sc)
 	v = CAS_READ_4(sc, CAS_MAC_RX_CONF);
 	v &= ~(CAS_MAC_RX_CONF_STRPPAD | CAS_MAC_RX_CONF_EN);
 	v |= CAS_MAC_RX_CONF_STRPFCS;
-	sc->sc_mac_rxcfg = v;
+	sc->cas_mac_rxcfg = v;
 	/*
 	 * Clear the RX filter and reprogram it.  This will also set the
 	 * current RX MAC configuration and enable it.
@@ -1171,17 +1171,17 @@ cas_init_locked(struct cas_softc *sc)
 	/* step 15.  Give the receiver a swift kick. */
 	CAS_WRITE_4(sc, CAS_RX_KICK, CAS_NRXDESC - 4);
 	CAS_WRITE_4(sc, CAS_RX_COMP_TAIL, 0);
-	if ((sc->sc_flags & CAS_REG_PLUS) != 0)
+	if ((sc->cas_flags & CAS_REG_PLUS) != 0)
 		CAS_WRITE_4(sc, CAS_RX_KICK2, CAS_NRXDESC2 - 4);
 
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 
-	mii_mediachg(sc->sc_mii);
+	mii_mediachg(sc->cas_mii);
 
 	/* Start the one second timer. */
-	sc->sc_wdog_timer = 0;
-	callout_reset(&sc->sc_tick_ch, hz, cas_tick, sc);
+	sc->cas_wdog_timer = 0;
+	callout_reset(&sc->cas_tick_ch, hz, cas_tick, sc);
 }
 
 static int
@@ -1197,7 +1197,7 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
 	/* Get a work queue entry. */
-	if ((txs = STAILQ_FIRST(&sc->sc_txfreeq)) == NULL) {
+	if ((txs = STAILQ_FIRST(&sc->cas_txfreeq)) == NULL) {
 		/* Ran out of descriptors. */
 		return (ENOBUFS);
 	}
@@ -1225,7 +1225,7 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 		*m_head = m;
 	}
 
-	error = bus_dmamap_load_mbuf_sg(sc->sc_tdmatag, txs->txs_dmamap,
+	error = bus_dmamap_load_mbuf_sg(sc->cas_tdmatag, txs->txs_dmamap,
 	    *m_head, txsegs, &nsegs, BUS_DMA_NOWAIT);
 	if (error == EFBIG) {
 		m = m_collapse(*m_head, M_NOWAIT, CAS_NTXSEGS);
@@ -1235,7 +1235,7 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 			return (ENOBUFS);
 		}
 		*m_head = m;
-		error = bus_dmamap_load_mbuf_sg(sc->sc_tdmatag,
+		error = bus_dmamap_load_mbuf_sg(sc->cas_tdmatag,
 		    txs->txs_dmamap, *m_head, txsegs, &nsegs,
 		    BUS_DMA_NOWAIT);
 		if (error != 0) {
@@ -1260,14 +1260,14 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 	 * at the end of the ring as a termination point, in
 	 * order to prevent wrap-around.
 	 */
-	if (nsegs > sc->sc_txfree - 1) {
+	if (nsegs > sc->cas_txfree - 1) {
 		txs->txs_ndescs = 0;
-		bus_dmamap_unload(sc->sc_tdmatag, txs->txs_dmamap);
+		bus_dmamap_unload(sc->cas_tdmatag, txs->txs_dmamap);
 		return (ENOBUFS);
 	}
 
 	txs->txs_ndescs = nsegs;
-	txs->txs_firstdesc = sc->sc_txnext;
+	txs->txs_firstdesc = sc->cas_txnext;
 	nexttx = txs->txs_firstdesc;
 	for (seg = 0; seg < nsegs; seg++, nexttx = CAS_NEXTTX(nexttx)) {
 #ifdef CAS_DEBUG
@@ -1276,12 +1276,12 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 		    __func__, seg, nexttx, txsegs[seg].ds_len,
 		    txsegs[seg].ds_addr, htole64(txsegs[seg].ds_addr));
 #endif
-		sc->sc_txdescs[nexttx].cd_buf_ptr =
+		sc->cas_txdescs[nexttx].cd_buf_ptr =
 		    htole64(txsegs[seg].ds_addr);
 		KASSERT(txsegs[seg].ds_len <
 		    CAS_TD_BUF_LEN_MASK >> CAS_TD_BUF_LEN_SHFT,
 		    ("%s: segment size too large!", __func__));
-		sc->sc_txdescs[nexttx].cd_flags =
+		sc->cas_txdescs[nexttx].cd_flags =
 		    htole64(txsegs[seg].ds_len << CAS_TD_BUF_LEN_SHFT);
 		txs->txs_lastdesc = nexttx;
 	}
@@ -1291,7 +1291,7 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 	CTR3(KTR_CAS, "%s: end of frame at segment %d, TX %d",
 	    __func__, seg, nexttx);
 #endif
-	sc->sc_txdescs[txs->txs_lastdesc].cd_flags |=
+	sc->cas_txdescs[txs->txs_lastdesc].cd_flags |=
 	    htole64(CAS_TD_END_OF_FRAME);
 
 	/* Lastly set SOF on the first descriptor. */
@@ -1299,16 +1299,16 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 	CTR3(KTR_CAS, "%s: start of frame at segment %d, TX %d",
 	    __func__, seg, nexttx);
 #endif
-	if (sc->sc_txwin += nsegs > CAS_MAXTXFREE * 2 / 3) {
-		sc->sc_txwin = 0;
-		sc->sc_txdescs[txs->txs_firstdesc].cd_flags |=
+	if (sc->cas_txwin += nsegs > CAS_MAXTXFREE * 2 / 3) {
+		sc->cas_txwin = 0;
+		sc->cas_txdescs[txs->txs_firstdesc].cd_flags |=
 		    htole64(cflags | CAS_TD_START_OF_FRAME | CAS_TD_INT_ME);
 	} else
-		sc->sc_txdescs[txs->txs_firstdesc].cd_flags |=
+		sc->cas_txdescs[txs->txs_firstdesc].cd_flags |=
 		    htole64(cflags | CAS_TD_START_OF_FRAME);
 
 	/* Sync the DMA map. */
-	bus_dmamap_sync(sc->sc_tdmatag, txs->txs_dmamap,
+	bus_dmamap_sync(sc->cas_tdmatag, txs->txs_dmamap,
 	    BUS_DMASYNC_PREWRITE);
 
 #ifdef CAS_DEBUG
@@ -1316,12 +1316,12 @@ cas_load_txmbuf(struct cas_softc *sc, struct mbuf **m_head)
 	    __func__, txs->txs_firstdesc, txs->txs_lastdesc,
 	    txs->txs_ndescs);
 #endif
-	STAILQ_REMOVE_HEAD(&sc->sc_txfreeq, txs_q);
-	STAILQ_INSERT_TAIL(&sc->sc_txdirtyq, txs, txs_q);
+	STAILQ_REMOVE_HEAD(&sc->cas_txfreeq, txs_q);
+	STAILQ_INSERT_TAIL(&sc->cas_txdirtyq, txs, txs_q);
 	txs->txs_mbuf = *m_head;
 
-	sc->sc_txnext = CAS_NEXTTX(txs->txs_lastdesc);
-	sc->sc_txfree -= txs->txs_ndescs;
+	sc->cas_txnext = CAS_NEXTTX(txs->txs_lastdesc);
+	sc->cas_txfree -= txs->txs_ndescs;
 
 	return (0);
 }
@@ -1330,12 +1330,12 @@ static void
 cas_init_regs(struct cas_softc *sc)
 {
 	int i;
-	const u_char *laddr = IF_LLADDR(sc->sc_ifp);
+	const u_char *laddr = IF_LLADDR(sc->cas_ifp);
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
 	/* These registers are not cleared on reset. */
-	if ((sc->sc_flags & CAS_INITED) == 0) {
+	if ((sc->cas_flags & CAS_INITED) == 0) {
 		/* magic values */
 		CAS_WRITE_4(sc, CAS_MAC_IPG0, 0);
 		CAS_WRITE_4(sc, CAS_MAC_IPG1, 8);
@@ -1381,7 +1381,7 @@ cas_init_regs(struct cas_softc *sc)
 		    i += CAS_MAC_HASH1 - CAS_MAC_HASH0)
 			CAS_WRITE_4(sc, i, 0);
 
-		sc->sc_flags |= CAS_INITED;
+		sc->cas_flags |= CAS_INITED;
 	}
 
 	/* Counters need to be zeroed. */
@@ -1430,10 +1430,10 @@ cas_txkick(struct cas_softc *sc)
 	 */
 #ifdef CAS_DEBUG
 	CTR3(KTR_CAS, "%s: %s: kicking TX %d",
-	    device_get_name(sc->sc_dev), __func__, sc->sc_txnext);
+	    device_get_name(sc->cas_dev), __func__, sc->cas_txnext);
 #endif
 	CAS_CDSYNC(sc, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-	CAS_WRITE_4(sc, CAS_TX_KICK3, sc->sc_txnext);
+	CAS_WRITE_4(sc, CAS_TX_KICK3, sc->cas_txnext);
 }
 
 static void
@@ -1446,22 +1446,22 @@ cas_start(struct ifnet *ifp)
 	CAS_LOCK(sc);
 
 	if ((ifp->if_drv_flags & (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) !=
-	    IFF_DRV_RUNNING || (sc->sc_flags & CAS_LINK) == 0) {
+	    IFF_DRV_RUNNING || (sc->cas_flags & CAS_LINK) == 0) {
 		CAS_UNLOCK(sc);
 		return;
 	}
 
-	if (sc->sc_txfree < CAS_MAXTXFREE / 4)
+	if (sc->cas_txfree < CAS_MAXTXFREE / 4)
 		cas_tint(sc);
 
 #ifdef CAS_DEBUG
 	CTR4(KTR_CAS, "%s: %s: txfree %d, txnext %d",
-	    device_get_name(sc->sc_dev), __func__, sc->sc_txfree,
-	    sc->sc_txnext);
+	    device_get_name(sc->cas_dev), __func__, sc->cas_txfree,
+	    sc->cas_txnext);
 #endif
 	ntx = 0;
 	kicked = 0;
-	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd) && sc->sc_txfree > 1;) {
+	for (; !IFQ_DRV_IS_EMPTY(&ifp->if_snd) && sc->cas_txfree > 1;) {
 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m);
 		if (m == NULL)
 			break;
@@ -1472,7 +1472,7 @@ cas_start(struct ifnet *ifp)
 			IFQ_DRV_PREPEND(&ifp->if_snd, m);
 			break;
 		}
-		if ((sc->sc_txnext % 4) == 0) {
+		if ((sc->cas_txnext % 4) == 0) {
 			cas_txkick(sc);
 			kicked = 1;
 		} else
@@ -1486,15 +1486,15 @@ cas_start(struct ifnet *ifp)
 			cas_txkick(sc);
 #ifdef CAS_DEBUG
 		CTR2(KTR_CAS, "%s: packets enqueued, OWN on %d",
-		    device_get_name(sc->sc_dev), sc->sc_txnext);
+		    device_get_name(sc->cas_dev), sc->cas_txnext);
 #endif
 
 		/* Set a watchdog timer in case the chip flakes out. */
-		sc->sc_wdog_timer = 5;
+		sc->cas_wdog_timer = 5;
 #ifdef CAS_DEBUG
 		CTR3(KTR_CAS, "%s: %s: watchdog %d",
-		    device_get_name(sc->sc_dev), __func__,
-		    sc->sc_wdog_timer);
+		    device_get_name(sc->cas_dev), __func__,
+		    sc->cas_wdog_timer);
 #endif
 	}
 
@@ -1504,7 +1504,7 @@ cas_start(struct ifnet *ifp)
 static void
 cas_tint(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	struct cas_txsoft *txs;
 	int progress;
 	uint32_t txlast;
@@ -1513,7 +1513,7 @@ cas_tint(struct cas_softc *sc)
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
-	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->sc_dev), __func__);
+	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->cas_dev), __func__);
 #endif
 
 	/*
@@ -1522,7 +1522,7 @@ cas_tint(struct cas_softc *sc)
 	 */
 	progress = 0;
 	CAS_CDSYNC(sc, BUS_DMASYNC_POSTREAD);
-	while ((txs = STAILQ_FIRST(&sc->sc_txdirtyq)) != NULL) {
+	while ((txs = STAILQ_FIRST(&sc->cas_txdirtyq)) != NULL) {
 #ifdef CAS_DEBUG
 		if ((ifp->if_flags & IFF_DEBUG) != 0) {
 			printf("    txsoft %p transmit chain:\n", txs);
@@ -1530,10 +1530,10 @@ cas_tint(struct cas_softc *sc)
 				printf("descriptor %d: ", i);
 				printf("cd_flags: 0x%016llx\t",
 				    (long long)le64toh(
-				    sc->sc_txdescs[i].cd_flags));
+				    sc->cas_txdescs[i].cd_flags));
 				printf("cd_buf_ptr: 0x%016llx\n",
 				    (long long)le64toh(
-				    sc->sc_txdescs[i].cd_buf_ptr));
+				    sc->cas_txdescs[i].cd_buf_ptr));
 				if (i == txs->txs_lastdesc)
 					break;
 			}
@@ -1567,19 +1567,19 @@ cas_tint(struct cas_softc *sc)
 #ifdef CAS_DEBUG
 		CTR1(KTR_CAS, "%s: releasing a descriptor", __func__);
 #endif
-		STAILQ_REMOVE_HEAD(&sc->sc_txdirtyq, txs_q);
+		STAILQ_REMOVE_HEAD(&sc->cas_txdirtyq, txs_q);
 
-		sc->sc_txfree += txs->txs_ndescs;
+		sc->cas_txfree += txs->txs_ndescs;
 
-		bus_dmamap_sync(sc->sc_tdmatag, txs->txs_dmamap,
+		bus_dmamap_sync(sc->cas_tdmatag, txs->txs_dmamap,
 		    BUS_DMASYNC_POSTWRITE);
-		bus_dmamap_unload(sc->sc_tdmatag, txs->txs_dmamap);
+		bus_dmamap_unload(sc->cas_tdmatag, txs->txs_dmamap);
 		if (txs->txs_mbuf != NULL) {
 			m_freem(txs->txs_mbuf);
 			txs->txs_mbuf = NULL;
 		}
 
-		STAILQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
+		STAILQ_INSERT_TAIL(&sc->cas_txfreeq, txs, txs_q);
 
 		if_inc_counter(ifp, IFCOUNTER_OPACKETS, 1);
 		progress = 1;
@@ -1597,13 +1597,13 @@ cas_tint(struct cas_softc *sc)
 	if (progress) {
 		/* We freed some descriptors, so reset IFF_DRV_OACTIVE. */
 		ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
-		if (STAILQ_EMPTY(&sc->sc_txdirtyq))
-			sc->sc_wdog_timer = 0;
+		if (STAILQ_EMPTY(&sc->cas_txdirtyq))
+			sc->cas_wdog_timer = 0;
 	}
 
 #ifdef CAS_DEBUG
 	CTR3(KTR_CAS, "%s: %s: watchdog %d",
-	    device_get_name(sc->sc_dev), __func__, sc->sc_wdog_timer);
+	    device_get_name(sc->cas_dev), __func__, sc->cas_wdog_timer);
 #endif
 }
 
@@ -1621,7 +1621,7 @@ static void
 cas_rint(struct cas_softc *sc)
 {
 	struct cas_rxdsoft *rxds, *rxds2;
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	struct mbuf *m, *m2;
 	uint64_t word1, word2, word3, word4;
 	uint32_t rxhead;
@@ -1629,21 +1629,21 @@ cas_rint(struct cas_softc *sc)
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
-	callout_stop(&sc->sc_rx_ch);
+	callout_stop(&sc->cas_rx_ch);
 
 #ifdef CAS_DEBUG
-	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->sc_dev), __func__);
+	CTR2(KTR_CAS, "%s: %s", device_get_name(sc->cas_dev), __func__);
 #endif
 
 #define	PRINTWORD(n, delimiter)						\
 	printf("word ## n: 0x%016llx%c", (long long)word ## n, delimiter)
 
 #define	SKIPASSERT(n)							\
-	KASSERT(sc->sc_rxcomps[sc->sc_rxcptr].crc_word ## n == 0,	\
+	KASSERT(sc->cas_rxcomps[sc->cas_rxcptr].crc_word ## n == 0,	\
 	    ("%s: word ## n not 0", __func__))
 
 #define	WORDTOH(n)							\
-	word ## n = le64toh(sc->sc_rxcomps[sc->sc_rxcptr].crc_word ## n)
+	word ## n = le64toh(sc->cas_rxcomps[sc->cas_rxcptr].crc_word ## n)
 
 	/*
 	 * Read the completion head register once.  This limits
@@ -1651,13 +1651,13 @@ cas_rint(struct cas_softc *sc)
 	 */
 	rxhead = CAS_READ_4(sc, CAS_RX_COMP_HEAD);
 #ifdef CAS_DEBUG
-	CTR4(KTR_CAS, "%s: sc->sc_rxcptr %d, sc->sc_rxdptr %d, head %d",
-	    __func__, sc->sc_rxcptr, sc->sc_rxdptr, rxhead);
+	CTR4(KTR_CAS, "%s: sc->cas_rxcptr %d, sc->cas_rxdptr %d, head %d",
+	    __func__, sc->cas_rxcptr, sc->cas_rxdptr, rxhead);
 #endif
 	skip = 0;
 	CAS_CDSYNC(sc, BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
-	for (; sc->sc_rxcptr != rxhead;
-	    sc->sc_rxcptr = CAS_NEXTRXCOMP(sc->sc_rxcptr)) {
+	for (; sc->cas_rxcptr != rxhead;
+	    sc->cas_rxcptr = CAS_NEXTRXCOMP(sc->cas_rxcptr)) {
 		if (skip != 0) {
 			SKIPASSERT(1);
 			SKIPASSERT(2);
@@ -1674,7 +1674,7 @@ cas_rint(struct cas_softc *sc)
 
 #ifdef CAS_DEBUG
 		if ((ifp->if_flags & IFF_DEBUG) != 0) {
-			printf("    completion %d: ", sc->sc_rxcptr);
+			printf("    completion %d: ", sc->cas_rxcptr);
 			PRINTWORD(1, '\t');
 			PRINTWORD(2, '\t');
 			PRINTWORD(3, '\t');
@@ -1693,7 +1693,7 @@ cas_rint(struct cas_softc *sc)
 			 * one arrives to trigger a new interrupt, which is
 			 * generally undesirable, so set up a timeout.
 			 */
-			callout_reset(&sc->sc_rx_ch, CAS_RXOWN_TICKS,
+			callout_reset(&sc->cas_rx_ch, CAS_RXOWN_TICKS,
 			    cas_rint_timeout, sc);
 			break;
 		}
@@ -1701,7 +1701,7 @@ cas_rint(struct cas_softc *sc)
 		if (__predict_false(
 		    (word4 & (CAS_RC4_BAD | CAS_RC4_LEN_MMATCH)) != 0)) {
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "receive error: CRC error\n");
 			continue;
 		}
@@ -1726,11 +1726,11 @@ cas_rint(struct cas_softc *sc)
 			CTR4(KTR_CAS, "%s: hdr at idx %d, off %d, len %d",
 			    __func__, idx, off, len);
 #endif
-			rxds = &sc->sc_rxdsoft[idx];
+			rxds = &sc->cas_rxdsoft[idx];
 			MGETHDR(m, M_NOWAIT, MT_DATA);
 			if (m != NULL) {
 				refcount_acquire(&rxds->rxds_refcount);
-				bus_dmamap_sync(sc->sc_rdmatag,
+				bus_dmamap_sync(sc->cas_rdmatag,
 				    rxds->rxds_dmamap, BUS_DMASYNC_POSTREAD);
 #if __FreeBSD_version < 800016
 				MEXTADD(m, (caddr_t)rxds->rxds_buf +
@@ -1771,13 +1771,13 @@ cas_rint(struct cas_softc *sc)
 			CTR4(KTR_CAS, "%s: data at idx %d, off %d, len %d",
 			    __func__, idx, off, len);
 #endif
-			rxds = &sc->sc_rxdsoft[idx];
+			rxds = &sc->cas_rxdsoft[idx];
 			MGETHDR(m, M_NOWAIT, MT_DATA);
 			if (m != NULL) {
 				refcount_acquire(&rxds->rxds_refcount);
 				off += ETHER_ALIGN;
 				m->m_len = min(CAS_PAGE_SIZE - off, len);
-				bus_dmamap_sync(sc->sc_rdmatag,
+				bus_dmamap_sync(sc->cas_rdmatag,
 				    rxds->rxds_dmamap, BUS_DMASYNC_POSTREAD);
 #if __FreeBSD_version < 800016
 				MEXTADD(m, (caddr_t)rxds->rxds_buf + off,
@@ -1807,7 +1807,7 @@ cas_rint(struct cas_softc *sc)
 				CTR2(KTR_CAS, "%s: split at idx %d",
 				    __func__, idx2);
 #endif
-				rxds2 = &sc->sc_rxdsoft[idx2];
+				rxds2 = &sc->cas_rxdsoft[idx2];
 				if (m != NULL) {
 					MGET(m2, M_NOWAIT, MT_DATA);
 					if (m2 != NULL) {
@@ -1815,7 +1815,7 @@ cas_rint(struct cas_softc *sc)
 						    &rxds2->rxds_refcount);
 						m2->m_len = len - m->m_len;
 						bus_dmamap_sync(
-						    sc->sc_rdmatag,
+						    sc->cas_rdmatag,
 						    rxds2->rxds_dmamap,
 						    BUS_DMASYNC_POSTREAD);
 #if __FreeBSD_version < 800016
@@ -1870,20 +1870,20 @@ cas_rint(struct cas_softc *sc)
 		skip = CAS_GET(word1, CAS_RC1_SKIP);
 
  skip:
-		cas_rxcompinit(&sc->sc_rxcomps[sc->sc_rxcptr]);
+		cas_rxcompinit(&sc->cas_rxcomps[sc->cas_rxcptr]);
 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
 			break;
 	}
 	CAS_CDSYNC(sc, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-	CAS_WRITE_4(sc, CAS_RX_COMP_TAIL, sc->sc_rxcptr);
+	CAS_WRITE_4(sc, CAS_RX_COMP_TAIL, sc->cas_rxcptr);
 
 #undef PRINTWORD
 #undef SKIPASSERT
 #undef WORDTOH
 
 #ifdef CAS_DEBUG
-	CTR4(KTR_CAS, "%s: done sc->sc_rxcptr %d, sc->sc_rxdptr %d, head %d",
-	    __func__, sc->sc_rxcptr, sc->sc_rxdptr,
+	CTR4(KTR_CAS, "%s: done sc->cas_rxcptr %d, sc->cas_rxdptr %d, head %d",
+	    __func__, sc->cas_rxcptr, sc->cas_rxdptr,
 	    CAS_READ_4(sc, CAS_RX_COMP_HEAD));
 #endif
 }
@@ -1902,7 +1902,7 @@ cas_free(struct mbuf *m, void *arg1, void *arg2)
 #else
 	sc = arg1;
 	idx = (uintptr_t)arg2;
-	rxds = &sc->sc_rxdsoft[idx];
+	rxds = &sc->cas_rxdsoft[idx];
 #endif
 	if (refcount_release(&rxds->rxds_refcount) == 0)
 		return;
@@ -1924,10 +1924,10 @@ cas_add_rxdesc(struct cas_softc *sc, u_int idx)
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
-	bus_dmamap_sync(sc->sc_rdmatag, sc->sc_rxdsoft[idx].rxds_dmamap,
+	bus_dmamap_sync(sc->cas_rdmatag, sc->cas_rxdsoft[idx].rxds_dmamap,
 	    BUS_DMASYNC_PREREAD);
-	CAS_UPDATE_RXDESC(sc, sc->sc_rxdptr, idx);
-	sc->sc_rxdptr = CAS_NEXTRXDESC(sc->sc_rxdptr);
+	CAS_UPDATE_RXDESC(sc, sc->cas_rxdptr, idx);
+	sc->cas_rxdptr = CAS_NEXTRXDESC(sc->cas_rxdptr);
 
 	/*
 	 * Update the RX kick register.  This register has to point to the
@@ -1935,30 +1935,30 @@ cas_add_rxdesc(struct cas_softc *sc, u_int idx)
 	 * and for optimum performance should be incremented in multiples
 	 * of 4 (the DMA engine fetches/updates descriptors in batches of 4).
 	 */
-	if ((sc->sc_rxdptr % 4) == 0) {
+	if ((sc->cas_rxdptr % 4) == 0) {
 		CAS_CDSYNC(sc, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 		CAS_WRITE_4(sc, CAS_RX_KICK,
-		    (sc->sc_rxdptr + CAS_NRXDESC - 4) & CAS_NRXDESC_MASK);
+		    (sc->cas_rxdptr + CAS_NRXDESC - 4) & CAS_NRXDESC_MASK);
 	}
 }
 
 static void
 cas_eint(struct cas_softc *sc, u_int status)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
 	if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 
-	device_printf(sc->sc_dev, "%s: status 0x%x", __func__, status);
+	device_printf(sc->cas_dev, "%s: status 0x%x", __func__, status);
 	if ((status & CAS_INTR_PCI_ERROR_INT) != 0) {
 		status = CAS_READ_4(sc, CAS_ERROR_STATUS);
 		printf(", PCI bus error 0x%x", status);
 		if ((status & CAS_ERROR_OTHER) != 0) {
-			status = pci_read_config(sc->sc_dev, PCIR_STATUS, 2);
+			status = pci_read_config(sc->cas_dev, PCIR_STATUS, 2);
 			printf(", PCI status 0x%x", status);
-			pci_write_config(sc->sc_dev, PCIR_STATUS, status, 2);
+			pci_write_config(sc->cas_dev, PCIR_STATUS, status, 2);
 		}
 	}
 	printf("\n");
@@ -1966,7 +1966,7 @@ cas_eint(struct cas_softc *sc, u_int status)
 	ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	cas_init_locked(sc);
 	if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
-		taskqueue_enqueue(sc->sc_tq, &sc->sc_tx_task);
+		taskqueue_enqueue(sc->cas_tq, &sc->cas_tx_task);
 }
 
 static int
@@ -1980,7 +1980,7 @@ cas_intr(void *v)
 
 	/* Disable interrupts. */
 	CAS_WRITE_4(sc, CAS_INTMASK, 0xffffffff);
-	taskqueue_enqueue(sc->sc_tq, &sc->sc_intr_task);
+	taskqueue_enqueue(sc->cas_tq, &sc->cas_intr_task);
 
 	return (FILTER_HANDLED);
 }
@@ -1989,7 +1989,7 @@ static void
 cas_intr_task(void *arg, int pending __unused)
 {
 	struct cas_softc *sc = arg;
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	uint32_t status, status2;
 
 	CAS_LOCK_ASSERT(sc, MA_NOTOWNED);
@@ -2004,7 +2004,7 @@ cas_intr_task(void *arg, int pending __unused)
 	CAS_LOCK(sc);
 #ifdef CAS_DEBUG
 	CTR4(KTR_CAS, "%s: %s: cplt %x, status %x",
-	    device_get_name(sc->sc_dev), __func__,
+	    device_get_name(sc->cas_dev), __func__,
 	    (status >> CAS_STATUS_TX_COMP3_SHFT), (u_int)status);
 
 	/*
@@ -2015,26 +2015,26 @@ cas_intr_task(void *arg, int pending __unused)
 		    CAS_READ_4(sc, CAS_PCS_INTR_STATUS) |
 		    CAS_READ_4(sc, CAS_PCS_INTR_STATUS);
 		if ((status2 & CAS_PCS_INTR_LINK) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: PCS link status changed\n", __func__);
 	}
 	if ((status & CAS_MAC_CTRL_STATUS) != 0) {
 		status2 = CAS_READ_4(sc, CAS_MAC_CTRL_STATUS);
 		if ((status2 & CAS_MAC_CTRL_PAUSE) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: PAUSE received (PAUSE time %d slots)\n",
 			    __func__,
 			    (status2 & CAS_MAC_CTRL_STATUS_PT_MASK) >>
 			    CAS_MAC_CTRL_STATUS_PT_SHFT);
 		if ((status2 & CAS_MAC_CTRL_PAUSE) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: transited to PAUSE state\n", __func__);
 		if ((status2 & CAS_MAC_CTRL_NON_PAUSE) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: transited to non-PAUSE state\n", __func__);
 	}
 	if ((status & CAS_INTR_MIF) != 0)
-		device_printf(sc->sc_dev, "%s: MIF interrupt\n", __func__);
+		device_printf(sc->cas_dev, "%s: MIF interrupt\n", __func__);
 #endif
 
 	if (__predict_false((status &
@@ -2051,7 +2051,7 @@ cas_intr_task(void *arg, int pending __unused)
 		    (CAS_MAC_TX_UNDERRUN | CAS_MAC_TX_MAX_PKT_ERR)) != 0)
 			if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 		else if ((status2 & ~CAS_MAC_TX_FRAME_XMTD) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "MAC TX fault, status %x\n", status2);
 	}
 
@@ -2060,7 +2060,7 @@ cas_intr_task(void *arg, int pending __unused)
 		if ((status2 & CAS_MAC_RX_OVERFLOW) != 0)
 			if_inc_counter(ifp, IFCOUNTER_IERRORS, 1);
 		else if ((status2 & ~CAS_MAC_RX_FRAME_RCVD) != 0)
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "MAC RX fault, status %x\n", status2);
 	}
 
@@ -2072,7 +2072,7 @@ cas_intr_task(void *arg, int pending __unused)
 		if (__predict_false((status &
 		    (CAS_INTR_RX_BUF_NA | CAS_INTR_RX_COMP_FULL |
 		    CAS_INTR_RX_BUF_AEMPTY | CAS_INTR_RX_COMP_AFULL)) != 0))
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "RX fault, status %x\n", status);
 #endif
 	}
@@ -2085,12 +2085,12 @@ cas_intr_task(void *arg, int pending __unused)
 		CAS_UNLOCK(sc);
 		return;
 	} else if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
-		taskqueue_enqueue(sc->sc_tq, &sc->sc_tx_task);
+		taskqueue_enqueue(sc->cas_tq, &sc->cas_tx_task);
 	CAS_UNLOCK(sc);
 
 	status = CAS_READ_4(sc, CAS_STATUS_ALIAS);
 	if (__predict_false((status & CAS_INTR_SUMMARY) != 0)) {
-		taskqueue_enqueue(sc->sc_tq, &sc->sc_intr_task);
+		taskqueue_enqueue(sc->cas_tq, &sc->cas_intr_task);
 		return;
 	}
 
@@ -2111,7 +2111,7 @@ cas_intr_task(void *arg, int pending __unused)
 static void
 cas_watchdog(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
@@ -2128,20 +2128,20 @@ cas_watchdog(struct cas_softc *sc)
 	    CAS_READ_4(sc, CAS_MAC_TX_CONF));
 #endif
 
-	if (sc->sc_wdog_timer == 0 || --sc->sc_wdog_timer != 0)
+	if (sc->cas_wdog_timer == 0 || --sc->cas_wdog_timer != 0)
 		return;
 
-	if ((sc->sc_flags & CAS_LINK) != 0)
-		device_printf(sc->sc_dev, "device timeout\n");
+	if ((sc->cas_flags & CAS_LINK) != 0)
+		device_printf(sc->cas_dev, "device timeout\n");
 	else if (bootverbose)
-		device_printf(sc->sc_dev, "device timeout (no link)\n");
+		device_printf(sc->cas_dev, "device timeout (no link)\n");
 	if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 
 	/* Try to get more packets going. */
 	ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	cas_init_locked(sc);
 	if (!IFQ_DRV_IS_EMPTY(&ifp->if_snd))
-		taskqueue_enqueue(sc->sc_tq, &sc->sc_tx_task);
+		taskqueue_enqueue(sc->cas_tq, &sc->cas_tx_task);
 }
 
 static void
@@ -2181,7 +2181,7 @@ cas_mii_readreg(device_t dev, int phy, int reg)
 #endif
 
 	sc = device_get_softc(dev);
-	if ((sc->sc_flags & CAS_SERDES) != 0) {
+	if ((sc->cas_flags & CAS_SERDES) != 0) {
 		switch (reg) {
 		case MII_BMCR:
 			reg = CAS_PCS_CTRL;
@@ -2201,7 +2201,7 @@ cas_mii_readreg(device_t dev, int phy, int reg)
 		case MII_EXTSR:
 			return (EXTSR_1000XFDX | EXTSR_1000XHDX);
 		default:
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: unhandled register %d\n", __func__, reg);
 			return (0);
 		}
@@ -2223,7 +2223,7 @@ cas_mii_readreg(device_t dev, int phy, int reg)
 			return (v & CAS_MIF_FRAME_DATA);
 	}
 
-	device_printf(sc->sc_dev, "%s: timed out\n", __func__);
+	device_printf(sc->cas_dev, "%s: timed out\n", __func__);
 	return (0);
 }
 
@@ -2239,7 +2239,7 @@ cas_mii_writereg(device_t dev, int phy, int reg, int val)
 #endif
 
 	sc = device_get_softc(dev);
-	if ((sc->sc_flags & CAS_SERDES) != 0) {
+	if ((sc->cas_flags & CAS_SERDES) != 0) {
 		switch (reg) {
 		case MII_BMSR:
 			reg = CAS_PCS_STATUS;
@@ -2253,7 +2253,7 @@ cas_mii_writereg(device_t dev, int phy, int reg, int val)
 			    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 			if (!cas_bitwait(sc, CAS_PCS_CTRL,
 			    CAS_PCS_CTRL_RESET, 0))
-				device_printf(sc->sc_dev,
+				device_printf(sc->cas_dev,
 				    "cannot reset PCS\n");
 			/* FALLTHROUGH */
 		case MII_ANAR:
@@ -2276,7 +2276,7 @@ cas_mii_writereg(device_t dev, int phy, int reg, int val)
 			reg = CAS_PCS_ANLPAR;
 			break;
 		default:
-			device_printf(sc->sc_dev,
+			device_printf(sc->cas_dev,
 			    "%s: unhandled register %d\n", __func__, reg);
 			return (0);
 		}
@@ -2302,7 +2302,7 @@ cas_mii_writereg(device_t dev, int phy, int reg, int val)
 			return (1);
 	}
 
-	device_printf(sc->sc_dev, "%s: timed out\n", __func__);
+	device_printf(sc->cas_dev, "%s: timed out\n", __func__);
 	return (0);
 }
 
@@ -2315,22 +2315,22 @@ cas_mii_statchg(device_t dev)
 	uint32_t rxcfg, txcfg, v;
 
 	sc = device_get_softc(dev);
-	ifp = sc->sc_ifp;
+	ifp = sc->cas_ifp;
 
 	CAS_LOCK_ASSERT(sc, MA_OWNED);
 
 #ifdef CAS_DEBUG
 	if ((ifp->if_flags & IFF_DEBUG) != 0)
-		device_printf(sc->sc_dev, "%s: status changen", __func__);
+		device_printf(sc->cas_dev, "%s: status changen", __func__);
 #endif
 
-	if ((sc->sc_mii->mii_media_status & IFM_ACTIVE) != 0 &&
-	    IFM_SUBTYPE(sc->sc_mii->mii_media_active) != IFM_NONE)
-		sc->sc_flags |= CAS_LINK;
+	if ((sc->cas_mii->mii_media_status & IFM_ACTIVE) != 0 &&
+	    IFM_SUBTYPE(sc->cas_mii->mii_media_active) != IFM_NONE)
+		sc->cas_flags |= CAS_LINK;
 	else
-		sc->sc_flags &= ~CAS_LINK;
+		sc->cas_flags &= ~CAS_LINK;
 
-	switch (IFM_SUBTYPE(sc->sc_mii->mii_media_active)) {
+	switch (IFM_SUBTYPE(sc->cas_mii->mii_media_active)) {
 	case IFM_1000_SX:
 	case IFM_1000_LX:
 	case IFM_1000_CX:
@@ -2348,11 +2348,11 @@ cas_mii_statchg(device_t dev)
 	 * the Cassini+ ASIC Specification.
 	 */
 
-	rxcfg = sc->sc_mac_rxcfg;
+	rxcfg = sc->cas_mac_rxcfg;
 	rxcfg &= ~CAS_MAC_RX_CONF_CARR;
 	txcfg = CAS_MAC_TX_CONF_EN_IPG0 | CAS_MAC_TX_CONF_NGU |
 	    CAS_MAC_TX_CONF_NGUL;
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) != 0)
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) != 0)
 		txcfg |= CAS_MAC_TX_CONF_ICARR | CAS_MAC_TX_CONF_ICOLLIS;
 	else if (gigabit != 0) {
 		rxcfg |= CAS_MAC_RX_CONF_CARR;
@@ -2365,10 +2365,10 @@ cas_mii_statchg(device_t dev)
 
 	v = CAS_READ_4(sc, CAS_MAC_CTRL_CONF) &
 	    ~(CAS_MAC_CTRL_CONF_TXP | CAS_MAC_CTRL_CONF_RXP);
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) &
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) &
 	    IFM_ETH_RXPAUSE) != 0)
 		v |= CAS_MAC_CTRL_CONF_RXP;
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) &
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) &
 	    IFM_ETH_TXPAUSE) != 0)
 		v |= CAS_MAC_CTRL_CONF_TXP;
 	CAS_WRITE_4(sc, CAS_MAC_CTRL_CONF, v);
@@ -2381,23 +2381,23 @@ cas_mii_statchg(device_t dev)
 	 * more sense to optimze for the common case and just disable
 	 * hardware checksumming in half-duplex mode though.
 	 */
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) == 0) {
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) == 0) {
 		ifp->if_capenable &= ~IFCAP_HWCSUM;
 		ifp->if_hwassist = 0;
-	} else if ((sc->sc_flags & CAS_NO_CSUM) == 0) {
+	} else if ((sc->cas_flags & CAS_NO_CSUM) == 0) {
 		ifp->if_capenable = ifp->if_capabilities;
 		ifp->if_hwassist = CAS_CSUM_FEATURES;
 	}
 
-	if (sc->sc_variant == CAS_SATURN) {
-		if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) == 0)
+	if (sc->cas_variant == CAS_SATURN) {
+		if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) == 0)
 			/* silicon bug workaround */
 			CAS_WRITE_4(sc, CAS_MAC_PREAMBLE_LEN, 0x41);
 		else
 			CAS_WRITE_4(sc, CAS_MAC_PREAMBLE_LEN, 0x7);
 	}
 
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) == 0 &&
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) == 0 &&
 	    gigabit != 0)
 		CAS_WRITE_4(sc, CAS_MAC_SLOT_TIME,
 		    CAS_MAC_SLOT_TIME_CARR);
@@ -2407,20 +2407,20 @@ cas_mii_statchg(device_t dev)
 
 	/* XIF Configuration */
 	v = CAS_MAC_XIF_CONF_TX_OE | CAS_MAC_XIF_CONF_LNKLED;
-	if ((sc->sc_flags & CAS_SERDES) == 0) {
-		if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) == 0)
+	if ((sc->cas_flags & CAS_SERDES) == 0) {
+		if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) == 0)
 			v |= CAS_MAC_XIF_CONF_NOECHO;
 		v |= CAS_MAC_XIF_CONF_BUF_OE;
 	}
 	if (gigabit != 0)
 		v |= CAS_MAC_XIF_CONF_GMII;
-	if ((IFM_OPTIONS(sc->sc_mii->mii_media_active) & IFM_FDX) != 0)
+	if ((IFM_OPTIONS(sc->cas_mii->mii_media_active) & IFM_FDX) != 0)
 		v |= CAS_MAC_XIF_CONF_FDXLED;
 	CAS_WRITE_4(sc, CAS_MAC_XIF_CONF, v);
 
-	sc->sc_mac_rxcfg = rxcfg;
+	sc->cas_mac_rxcfg = rxcfg;
 	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0 &&
-	    (sc->sc_flags & CAS_LINK) != 0) {
+	    (sc->cas_flags & CAS_LINK) != 0) {
 		CAS_WRITE_4(sc, CAS_MAC_TX_CONF,
 		    txcfg | CAS_MAC_TX_CONF_EN);
 		CAS_WRITE_4(sc, CAS_MAC_RX_CONF,
@@ -2437,7 +2437,7 @@ cas_mediachange(struct ifnet *ifp)
 	/* XXX add support for serial media. */
 
 	CAS_LOCK(sc);
-	error = mii_mediachg(sc->sc_mii);
+	error = mii_mediachg(sc->cas_mii);
 	CAS_UNLOCK(sc);
 	return (error);
 }
@@ -2453,9 +2453,9 @@ cas_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 		return;
 	}
 
-	mii_pollstat(sc->sc_mii);
-	ifmr->ifm_active = sc->sc_mii->mii_media_active;
-	ifmr->ifm_status = sc->sc_mii->mii_media_status;
+	mii_pollstat(sc->cas_mii);
+	ifmr->ifm_active = sc->cas_mii->mii_media_active;
+	ifmr->ifm_status = sc->cas_mii->mii_media_status;
 	CAS_UNLOCK(sc);
 }
 
@@ -2472,19 +2472,19 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		CAS_LOCK(sc);
 		if ((ifp->if_flags & IFF_UP) != 0) {
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0 &&
-			    ((ifp->if_flags ^ sc->sc_ifflags) &
+			    ((ifp->if_flags ^ sc->cas_ifflags) &
 			    (IFF_ALLMULTI | IFF_PROMISC)) != 0)
 				cas_setladrf(sc);
 			else
 				cas_init_locked(sc);
 		} else if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
 			cas_stop(ifp);
-		sc->sc_ifflags = ifp->if_flags;
+		sc->cas_ifflags = ifp->if_flags;
 		CAS_UNLOCK(sc);
 		break;
 	case SIOCSIFCAP:
 		CAS_LOCK(sc);
-		if ((sc->sc_flags & CAS_NO_CSUM) != 0) {
+		if ((sc->cas_flags & CAS_NO_CSUM) != 0) {
 			error = EINVAL;
 			CAS_UNLOCK(sc);
 			break;
@@ -2512,7 +2512,7 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCGIFMEDIA:
 	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii->mii_media, cmd);
+		error = ifmedia_ioctl(ifp, ifr, &sc->cas_mii->mii_media, cmd);
 		break;
 	default:
 		error = ether_ioctl(ifp, cmd, data);
@@ -2525,7 +2525,7 @@ cas_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 static void
 cas_setladrf(struct cas_softc *sc)
 {
-	struct ifnet *ifp = sc->sc_ifp;
+	struct ifnet *ifp = sc->cas_ifp;
 	struct ifmultiaddr *inm;
 	int i;
 	uint32_t hash[16];
@@ -2537,14 +2537,14 @@ cas_setladrf(struct cas_softc *sc)
 	 * Turn off the RX MAC and the hash filter as required by the Sun
 	 * Cassini programming restrictions.
 	 */
-	v = sc->sc_mac_rxcfg & ~(CAS_MAC_RX_CONF_HFILTER |
+	v = sc->cas_mac_rxcfg & ~(CAS_MAC_RX_CONF_HFILTER |
 	    CAS_MAC_RX_CONF_EN);
 	CAS_WRITE_4(sc, CAS_MAC_RX_CONF, v);
 	CAS_BARRIER(sc, CAS_MAC_RX_CONF, 4,
 	    BUS_SPACE_BARRIER_READ | BUS_SPACE_BARRIER_WRITE);
 	if (!cas_bitwait(sc, CAS_MAC_RX_CONF, CAS_MAC_RX_CONF_HFILTER |
 	    CAS_MAC_RX_CONF_EN, 0))
-		device_printf(sc->sc_dev,
+		device_printf(sc->cas_dev,
 		    "cannot disable RX MAC or hash filter\n");
 
 	v &= ~(CAS_MAC_RX_CONF_PROMISC | CAS_MAC_RX_CONF_PGRP);
@@ -2593,7 +2593,7 @@ cas_setladrf(struct cas_softc *sc)
 		    hash[i]);
 
  chipit:
-	sc->sc_mac_rxcfg = v;
+	sc->cas_mac_rxcfg = v;
 	CAS_WRITE_4(sc, CAS_MAC_RX_CONF, v | CAS_MAC_RX_CONF_EN);
 }
 
@@ -2682,15 +2682,15 @@ cas_pci_attach(device_t dev)
 #endif
 
 	sc = device_get_softc(dev);
-	sc->sc_variant = CAS_UNKNOWN;
+	sc->cas_variant = CAS_UNKNOWN;
 	for (i = 0; cas_pci_devlist[i].cpd_desc != NULL; i++) {
 		if (pci_get_devid(dev) == cas_pci_devlist[i].cpd_devid &&
 		    pci_get_revid(dev) >= cas_pci_devlist[i].cpd_revid) {
-			sc->sc_variant = cas_pci_devlist[i].cpd_variant;
+			sc->cas_variant = cas_pci_devlist[i].cpd_variant;
 			break;
 		}
 	}
-	if (sc->sc_variant == CAS_UNKNOWN) {
+	if (sc->cas_variant == CAS_UNKNOWN) {
 		device_printf(dev, "unknown adaptor\n");
 		return (ENXIO);
 	}
@@ -2700,34 +2700,34 @@ cas_pci_attach(device_t dev)
 	    pci_read_config(dev, PCIR_COMMAND, 2) | PCIM_CMD_BUSMASTEREN |
 	    PCIM_CMD_MWRICEN | PCIM_CMD_PERRESPEN | PCIM_CMD_SERRESPEN, 2);
 
-	sc->sc_dev = dev;
-	if (sc->sc_variant == CAS_CAS && pci_get_devid(dev) < 0x02)
+	sc->cas_dev = dev;
+	if (sc->cas_variant == CAS_CAS && pci_get_devid(dev) < 0x02)
 		/* Hardware checksumming may hang TX. */
-		sc->sc_flags |= CAS_NO_CSUM;
-	if (sc->sc_variant == CAS_CASPLUS || sc->sc_variant == CAS_SATURN)
-		sc->sc_flags |= CAS_REG_PLUS;
-	if (sc->sc_variant == CAS_CAS ||
-	    (sc->sc_variant == CAS_CASPLUS && pci_get_revid(dev) < 0x11))
-		sc->sc_flags |= CAS_TABORT;
+		sc->cas_flags |= CAS_NO_CSUM;
+	if (sc->cas_variant == CAS_CASPLUS || sc->cas_variant == CAS_SATURN)
+		sc->cas_flags |= CAS_REG_PLUS;
+	if (sc->cas_variant == CAS_CAS ||
+	    (sc->cas_variant == CAS_CASPLUS && pci_get_revid(dev) < 0x11))
+		sc->cas_flags |= CAS_TABORT;
 	if (bootverbose)
-		device_printf(dev, "flags=0x%x\n", sc->sc_flags);
+		device_printf(dev, "flags=0x%x\n", sc->cas_flags);
 
-	if (bus_alloc_resources(dev, cas_pci_res_spec, sc->sc_res)) {
+	if (bus_alloc_resources(dev, cas_pci_res_spec, sc->cas_res)) {
 		device_printf(dev, "failed to allocate resources\n");
-		bus_release_resources(dev, cas_pci_res_spec, sc->sc_res);
+		bus_release_resources(dev, cas_pci_res_spec, sc->cas_res);
 		return (ENXIO);
 	}
 
 	CAS_LOCK_INIT(sc, device_get_nameunit(dev));
 
 #if defined(__powerpc__) || defined(__sparc64__)
-	OF_getetheraddr(dev, sc->sc_enaddr);
+	OF_getetheraddr(dev, sc->cas_enaddr);
 	if (OF_getprop(ofw_bus_get_node(dev), CAS_PHY_INTERFACE, buf,
 	    sizeof(buf)) > 0 || OF_getprop(ofw_bus_get_node(dev),
 	    CAS_PHY_TYPE, buf, sizeof(buf)) > 0) {
 		buf[sizeof(buf) - 1] = '\0';
 		if (strcmp(buf, CAS_PHY_TYPE_PCS) == 0)
-			sc->sc_flags |= CAS_SERDES;
+			sc->cas_flags |= CAS_SERDES;
 	}
 #else
 	/*
@@ -2826,13 +2826,13 @@ cas_pci_attach(device_t dev)
 				if (CAS_ROM_READ_1(sc,
 				    j + PCI_VPD_SIZE + 4) != ETHER_ADDR_LEN)
 					continue;
-				bus_read_region_1(sc->sc_res[CAS_RES_MEM],
+				bus_read_region_1(sc->cas_res[CAS_RES_MEM],
 				    CAS_PCI_ROM_OFFSET + j + PCI_VPD_SIZE + 5,
 				    buf, sizeof(buf));
 				buf[sizeof(buf) - 1] = '\0';
 				if (strcmp(buf, CAS_LOCAL_MAC_ADDRESS) != 0)
 					continue;
-				bus_read_region_1(sc->sc_res[CAS_RES_MEM],
+				bus_read_region_1(sc->cas_res[CAS_RES_MEM],
 				    CAS_PCI_ROM_OFFSET + j + PCI_VPD_SIZE +
 				    5 + sizeof(CAS_LOCAL_MAC_ADDRESS),
 				    enaddr[lma], sizeof(enaddr[lma]));
@@ -2846,7 +2846,7 @@ cas_pci_attach(device_t dev)
 				    j + PCI_VPD_SIZE + 4) !=
 				    sizeof(CAS_PHY_TYPE_PCS))
 					continue;
-				bus_read_region_1(sc->sc_res[CAS_RES_MEM],
+				bus_read_region_1(sc->cas_res[CAS_RES_MEM],
 				    CAS_PCI_ROM_OFFSET + j + PCI_VPD_SIZE + 5,
 				    buf, sizeof(buf));
 				buf[sizeof(buf) - 1] = '\0';
@@ -2856,7 +2856,7 @@ cas_pci_attach(device_t dev)
 					k = sizeof(CAS_PHY_TYPE);
 				else
 					continue;
-				bus_read_region_1(sc->sc_res[CAS_RES_MEM],
+				bus_read_region_1(sc->cas_res[CAS_RES_MEM],
 				    CAS_PCI_ROM_OFFSET + j + PCI_VPD_SIZE +
 				    5 + k, buf, sizeof(buf));
 				buf[sizeof(buf) - 1] = '\0';
@@ -2883,7 +2883,7 @@ cas_pci_attach(device_t dev)
 	i = 0;
 	if (lma > 1 && pci_get_slot(dev) < nitems(enaddr))
 		i = pci_get_slot(dev);
-	memcpy(sc->sc_enaddr, enaddr[i], ETHER_ADDR_LEN);
+	memcpy(sc->cas_enaddr, enaddr[i], ETHER_ADDR_LEN);
 
 	if (phy == 0) {
 		device_printf(dev, "could not determine PHY type\n");
@@ -2893,7 +2893,7 @@ cas_pci_attach(device_t dev)
 	if (phy > 1 && pci_get_slot(dev) < nitems(pcs))
 		i = pci_get_slot(dev);
 	if (pcs[i] != 0)
-		sc->sc_flags |= CAS_SERDES;
+		sc->cas_flags |= CAS_SERDES;
 #endif
 
 	if (cas_attach(sc) != 0) {
@@ -2901,8 +2901,8 @@ cas_pci_attach(device_t dev)
 		goto fail;
 	}
 
-	if (bus_setup_intr(dev, sc->sc_res[CAS_RES_INTR], INTR_TYPE_NET |
-	    INTR_MPSAFE, cas_intr, NULL, sc, &sc->sc_ih) != 0) {
+	if (bus_setup_intr(dev, sc->cas_res[CAS_RES_INTR], INTR_TYPE_NET |
+	    INTR_MPSAFE, cas_intr, NULL, sc, &sc->cas_ih) != 0) {
 		device_printf(dev, "failed to set up interrupt\n");
 		cas_detach(sc);
 		goto fail;
@@ -2911,7 +2911,7 @@ cas_pci_attach(device_t dev)
 
  fail:
 	CAS_LOCK_DESTROY(sc);
-	bus_release_resources(dev, cas_pci_res_spec, sc->sc_res);
+	bus_release_resources(dev, cas_pci_res_spec, sc->cas_res);
 	return (ENXIO);
 }
 
@@ -2921,10 +2921,10 @@ cas_pci_detach(device_t dev)
 	struct cas_softc *sc;
 
 	sc = device_get_softc(dev);
-	bus_teardown_intr(dev, sc->sc_res[CAS_RES_INTR], sc->sc_ih);
+	bus_teardown_intr(dev, sc->cas_res[CAS_RES_INTR], sc->cas_ih);
 	cas_detach(sc);
 	CAS_LOCK_DESTROY(sc);
-	bus_release_resources(dev, cas_pci_res_spec, sc->sc_res);
+	bus_release_resources(dev, cas_pci_res_spec, sc->cas_res);
 	return (0);
 }
 

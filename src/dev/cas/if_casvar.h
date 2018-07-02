@@ -130,37 +130,37 @@ struct cas_rxdsoft {
  * software state per device
  */
 struct cas_softc {
-	struct ifnet	*sc_ifp;
-	struct mtx	sc_mtx;
-	device_t	sc_miibus;
-	struct mii_data	*sc_mii;	/* MII media control */
-	device_t	sc_dev;		/* generic device information */
-	u_char		sc_enaddr[ETHER_ADDR_LEN];
-	struct callout	sc_tick_ch;	/* tick callout */
-	struct callout	sc_rx_ch;	/* delayed RX callout */
-	struct task	sc_intr_task;
-	struct task	sc_tx_task;
-	struct taskqueue	*sc_tq;
-	u_int		sc_wdog_timer;	/* watchdog timer */
+	struct ifnet	*cas_ifp;
+	struct mtx	cas_mtx;
+	device_t	cas_miibus;
+	struct mii_data	*cas_mii;	/* MII media control */
+	device_t	cas_dev;		/* generic device information */
+	u_char		cas_enaddr[ETHER_ADDR_LEN];
+	struct callout	cas_tick_ch;	/* tick callout */
+	struct callout	cas_rx_ch;	/* delayed RX callout */
+	struct task	cas_intr_task;
+	struct task	cas_tx_task;
+	struct taskqueue	*cas_tq;
+	u_int		cas_wdog_timer;	/* watchdog timer */
 
-	void		*sc_ih;
-	struct resource *sc_res[2];
+	void		*cas_ih;
+	struct resource *cas_res[2];
 #define	CAS_RES_INTR	0
 #define	CAS_RES_MEM	1
 
-	bus_dma_tag_t	sc_pdmatag;	/* parent bus DMA tag */
-	bus_dma_tag_t	sc_rdmatag;	/* RX bus DMA tag */
-	bus_dma_tag_t	sc_tdmatag;	/* TX bus DMA tag */
-	bus_dma_tag_t	sc_cdmatag;	/* control data bus DMA tag */
-	bus_dmamap_t	sc_dmamap;	/* bus DMA handle */
+	bus_dma_tag_t	cas_pdmatag;	/* parent bus DMA tag */
+	bus_dma_tag_t	cas_rdmatag;	/* RX bus DMA tag */
+	bus_dma_tag_t	cas_tdmatag;	/* TX bus DMA tag */
+	bus_dma_tag_t	cas_cdmatag;	/* control data bus DMA tag */
+	bus_dmamap_t	cas_dmamap;	/* bus DMA handle */
 
-	u_int		sc_variant;
+	u_int		cas_variant;
 #define	CAS_UNKNOWN	0		/* don't know */
 #define	CAS_CAS		1		/* Sun Cassini */
 #define	CAS_CASPLUS	2		/* Sun Cassini+ */
 #define	CAS_SATURN	3		/* National Semiconductor Saturn */
 
-	u_int		sc_flags;
+	u_int		cas_flags;
 #define	CAS_INITED	(1 << 0)	/* reset persistent regs init'ed */
 #define	CAS_NO_CSUM	(1 << 1)	/* don't use hardware checksumming */
 #define	CAS_LINK	(1 << 2)	/* link is up */
@@ -168,61 +168,61 @@ struct cas_softc {
 #define	CAS_SERDES	(1 << 4)	/* use the SERDES */
 #define	CAS_TABORT	(1 << 5)	/* has target abort issues */
 
-	bus_dmamap_t	sc_cddmamap;	/* control data DMA map */
-	bus_addr_t	sc_cddma;
+	bus_dmamap_t	cas_cddmamap;	/* control data DMA map */
+	bus_addr_t	cas_cddma;
 
 	/*
 	 * software state for transmit and receive descriptors
 	 */
-	struct cas_txsoft sc_txsoft[CAS_TXQUEUELEN];
-	struct cas_rxdsoft sc_rxdsoft[CAS_NRXDESC];
+	struct cas_txsoft cas_txsoft[CAS_TXQUEUELEN];
+	struct cas_rxdsoft cas_rxdsoft[CAS_NRXDESC];
 
 	/*
 	 * control data structures
 	 */
-	struct cas_control_data *sc_control_data;
-#define	sc_txdescs	sc_control_data->ccd_txdescs
-#define	sc_rxcomps	sc_control_data->ccd_rxcomps
-#define	sc_rxdescs	sc_control_data->ccd_rxdescs
-#define	sc_rxdescs2	sc_control_data->ccd_rxdescs2
+	struct cas_control_data *cas_control_data;
+#define	cas_txdescs	cas_control_data->ccd_txdescs
+#define	cas_rxcomps	cas_control_data->ccd_rxcomps
+#define	cas_rxdescs	cas_control_data->ccd_rxdescs
+#define	cas_rxdescs2	cas_control_data->ccd_rxdescs2
 
-	u_int		sc_txfree;	/* number of free TX descriptors */
-	u_int		sc_txnext;	/* next ready TX descriptor */
-	u_int		sc_txwin;	/* TX desc. since last TX intr. */
+	u_int		cas_txfree;	/* number of free TX descriptors */
+	u_int		cas_txnext;	/* next ready TX descriptor */
+	u_int		cas_txwin;	/* TX desc. since last TX intr. */
 
-	struct cas_txsq	sc_txfreeq;	/* free software TX descriptors */
-	struct cas_txsq	sc_txdirtyq;	/* dirty software TX descriptors */
+	struct cas_txsq	cas_txfreeq;	/* free software TX descriptors */
+	struct cas_txsq	cas_txdirtyq;	/* dirty software TX descriptors */
 
-	u_int		sc_rxcptr;	/* next ready RX completion */
-	u_int		sc_rxdptr;	/* next ready RX descriptor */
+	u_int		cas_rxcptr;	/* next ready RX completion */
+	u_int		cas_rxdptr;	/* next ready RX descriptor */
 
-	uint32_t	sc_mac_rxcfg;	/* RX MAC conf. % CAS_MAC_RX_CONF_EN */
+	uint32_t	cas_mac_rxcfg;	/* RX MAC conf. % CAS_MAC_RX_CONF_EN */
 
-	int		sc_ifflags;
+	int		cas_ifflags;
 };
 
 #define	CAS_BARRIER(sc, offs, len, flags)				\
-	bus_barrier((sc)->sc_res[CAS_RES_MEM], (offs), (len), (flags))
+	bus_barrier((sc)->cas_res[CAS_RES_MEM], (offs), (len), (flags))
 
 #define	CAS_READ_N(n, sc, offs)						\
-	bus_read_ ## n((sc)->sc_res[CAS_RES_MEM], (offs))
+	bus_read_ ## n((sc)->cas_res[CAS_RES_MEM], (offs))
 #define	CAS_READ_1(sc, offs)		CAS_READ_N(1, (sc), (offs))
 #define	CAS_READ_2(sc, offs)		CAS_READ_N(2, (sc), (offs))
 #define	CAS_READ_4(sc, offs)		CAS_READ_N(4, (sc), (offs))
 
 #define	CAS_WRITE_N(n, sc, offs, v)					\
-	bus_write_ ## n((sc)->sc_res[CAS_RES_MEM], (offs), (v))
+	bus_write_ ## n((sc)->cas_res[CAS_RES_MEM], (offs), (v))
 #define	CAS_WRITE_1(sc, offs, v)	CAS_WRITE_N(1, (sc), (offs), (v))
 #define	CAS_WRITE_2(sc, offs, v)	CAS_WRITE_N(2, (sc), (offs), (v))
 #define	CAS_WRITE_4(sc, offs, v)	CAS_WRITE_N(4, (sc), (offs), (v))
 
-#define	CAS_CDTXDADDR(sc, x)	((sc)->sc_cddma + CAS_CDTXDOFF((x)))
-#define	CAS_CDRXCADDR(sc, x)	((sc)->sc_cddma + CAS_CDRXCOFF((x)))
-#define	CAS_CDRXDADDR(sc, x)	((sc)->sc_cddma + CAS_CDRXDOFF((x)))
-#define	CAS_CDRXD2ADDR(sc, x)	((sc)->sc_cddma + CAS_CDRXD2OFF((x)))
+#define	CAS_CDTXDADDR(sc, x)	((sc)->cas_cddma + CAS_CDTXDOFF((x)))
+#define	CAS_CDRXCADDR(sc, x)	((sc)->cas_cddma + CAS_CDRXCOFF((x)))
+#define	CAS_CDRXDADDR(sc, x)	((sc)->cas_cddma + CAS_CDRXDOFF((x)))
+#define	CAS_CDRXD2ADDR(sc, x)	((sc)->cas_cddma + CAS_CDRXD2OFF((x)))
 
 #define	CAS_CDSYNC(sc, ops)						\
-	bus_dmamap_sync((sc)->sc_cdmatag, (sc)->sc_cddmamap, (ops));
+	bus_dmamap_sync((sc)->cas_cdmatag, (sc)->cas_cddmamap, (ops));
 
 #define	__CAS_UPDATE_RXDESC(rxd, rxds, s)				\
 do {									\
@@ -236,28 +236,28 @@ do {									\
 } while (0)
 
 #define	CAS_UPDATE_RXDESC(sc, d, s)					\
-	__CAS_UPDATE_RXDESC(&(sc)->sc_rxdescs[(d)],			\
-	    &(sc)->sc_rxdsoft[(s)], (s))
+	__CAS_UPDATE_RXDESC(&(sc)->cas_rxdescs[(d)],			\
+	    &(sc)->cas_rxdsoft[(s)], (s))
 
 #if __FreeBSD_version < 800016
 #define	CAS_INIT_RXDESC(sc, d, s)					\
 do {									\
-	struct cas_rxdsoft *__rxds = &(sc)->sc_rxdsoft[(s)];		\
+	struct cas_rxdsoft *__rxds = &(sc)->cas_rxdsoft[(s)];		\
 									\
 	__rxds->rxds_sc = (sc);						\
 	__rxds->rxds_idx = (s);						\
-	__CAS_UPDATE_RXDESC(&(sc)->sc_rxdescs[(d)], __rxds, (s));	\
+	__CAS_UPDATE_RXDESC(&(sc)->cas_rxdescs[(d)], __rxds, (s));	\
 } while (0)
 #else
 #define	CAS_INIT_RXDESC(sc, d, s)	CAS_UPDATE_RXDESC(sc, d, s)
 #endif
 
 #define	CAS_LOCK_INIT(_sc, _name)					\
-	mtx_init(&(_sc)->sc_mtx, _name, MTX_NETWORK_LOCK, MTX_DEF)
-#define	CAS_LOCK(_sc)			mtx_lock(&(_sc)->sc_mtx)
-#define	CAS_UNLOCK(_sc)			mtx_unlock(&(_sc)->sc_mtx)
-#define	CAS_LOCK_ASSERT(_sc, _what)	mtx_assert(&(_sc)->sc_mtx, (_what))
-#define	CAS_LOCK_DESTROY(_sc)		mtx_destroy(&(_sc)->sc_mtx)
-#define	CAS_LOCK_OWNED(_sc)		mtx_owned(&(_sc)->sc_mtx)
+	mtx_init(&(_sc)->cas_mtx, _name, MTX_NETWORK_LOCK, MTX_DEF)
+#define	CAS_LOCK(_sc)			mtx_lock(&(_sc)->cas_mtx)
+#define	CAS_UNLOCK(_sc)			mtx_unlock(&(_sc)->cas_mtx)
+#define	CAS_LOCK_ASSERT(_sc, _what)	mtx_assert(&(_sc)->cas_mtx, (_what))
+#define	CAS_LOCK_DESTROY(_sc)		mtx_destroy(&(_sc)->cas_mtx)
+#define	CAS_LOCK_OWNED(_sc)		mtx_owned(&(_sc)->cas_mtx)
 
 #endif
