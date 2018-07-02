@@ -1167,6 +1167,13 @@ vge_attach(device_t dev)
 
 	/* Tell the upper layer(s) we support long frames. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
+#ifdef NETGRAPH
+	if ((error = ng_vge_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_vge_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
 
 	/* Hook interrupt last to avoid having to lock softc */
 	error = bus_setup_intr(dev, sc->vge_irq, INTR_TYPE_NET|INTR_MPSAFE,
@@ -1176,12 +1183,7 @@ vge_attach(device_t dev)
 		ether_ifdetach(ifp);
 		goto fail;
 	}
-#ifdef NETGRAPH
-	if ((error = ng_vge_tap_attach(sc)) != 0) {
-		device_printf(dev, "couldn't set up ng_vge_tap(4)\n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */	
+	
 fail:
 	if (error)
 		vge_detach(dev);
