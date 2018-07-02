@@ -1733,10 +1733,18 @@ re_attach(device_t dev)
 	 * ether_ifattach() sets ifi_hdrlen to the default value.
 	 */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
-
+	
 #ifdef DEV_NETMAP
 	re_netmap_attach(sc);
 #endif /* DEV_NETMAP */
+
+#ifdef NETGRAPH  
+	if ((error = ng_rl_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_re_tap(4) \n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
 
 #ifdef RE_DIAG
 	/*
@@ -1776,13 +1784,6 @@ re_attach(device_t dev)
 		goto fail;
 	}
 	
-#ifdef NETGRAPH  
-	if ((error = ng_rl_tap_attach(sc)) != 0) {
-		device_printf(dev, "couldn't set up ng_re_tap(4) \n");
-		ether_ifdetach(ifp);
-	}
-#endif /* NETGRAPH */
-
 fail:
 	if (error)
 		re_detach(dev);
