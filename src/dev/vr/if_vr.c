@@ -834,6 +834,14 @@ vr_attach(device_t dev)
 	 */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH  
+	if ((error = ng_vr_tap_attach(sc)) != 0) {
+		device_printf(dev, "couldn't set up ng_vr_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
+
 	/* Hook interrupt last to avoid having to lock softc. */
 	error = bus_setup_intr(dev, sc->vr_irq, INTR_TYPE_NET | INTR_MPSAFE,
 	    vr_intr, NULL, sc, &sc->vr_intrhand);
@@ -842,15 +850,8 @@ vr_attach(device_t dev)
 		device_printf(dev, "couldn't set up irq\n");
 		ether_ifdetach(ifp);
 		goto fail;
-	}	
-
-#ifdef NETGRAPH  
-	if ((error = ng_vr_tap_attach(sc)) != 0) {
-		device_printf(dev, "couldn't set up ng_vr_tap(4)\n");
-		ether_ifdetach(ifp);
 	}
-#endif /* NETGRAPH */
-
+	
 fail:
 	if (error)
 		vr_detach(dev);
