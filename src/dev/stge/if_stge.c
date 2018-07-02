@@ -651,6 +651,14 @@ stge_attach(device_t dev)
 	 */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
 
+#ifdef NETGRAPH
+	if ((error = ng_stge_tap_attach(sc)) != 0) {
+		device_printf(sc->stge_dev, 
+			"couldn't set up ng_stge_tap(4)\n");
+		ether_ifdetach(ifp);
+		goto fail;
+	}
+#endif /* NETGRAPH */
 	/*
 	 * The manual recommends disabling early transmit, so we
 	 * do.  It's disabled anyway, if using IP checksumming,
@@ -671,13 +679,10 @@ stge_attach(device_t dev)
 	 */
 	error = bus_setup_intr(dev, sc->stge_res[1], INTR_TYPE_NET | INTR_MPSAFE,
 	    NULL, stge_intr, sc, &sc->stge_ih);
-#ifdef NETGRAPH
-	if (error == 0)
-		error = ng_stge_tap_attach(sc);
-#endif /* NETGRAPH */	    
+	    	    
 	if (error != 0) {
-		ether_ifdetach(ifp);
 		device_printf(sc->stge_dev, "couldn't set up IRQ\n");
+		ether_ifdetach(ifp);
 		sc->stge_ifp = NULL;
 		goto fail;
 	}
