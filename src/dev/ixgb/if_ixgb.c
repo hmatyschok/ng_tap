@@ -1423,6 +1423,19 @@ ixgb_setup_interface(device_t dev, struct adapter * adapter)
 	ifp->if_capabilities |= IFCAP_POLLING;
 #endif
 
+#ifdef NETGRAPH
+	if (ng_ixgb_tap_attach(adapter) != 0) {
+		device_printf(dev, "can not setup ng_ixgb_tap(4)\n");
+#if __FreeBSD_version < 500000
+		ether_ifdetach(ifp, ETHER_BPF_SUPPORTED);
+#else
+		ether_ifdetach(ifp);
+#endif
+		adapter->ixgb_ifp = NULL;
+		return (ENXIO);
+	}
+#endif /* NETGRAPH */
+
 	/*
 	 * Specify the media types supported by this adapter and register
 	 * callbacks to update media and link information
@@ -1435,11 +1448,8 @@ ixgb_setup_interface(device_t dev, struct adapter * adapter)
 		    0, NULL);
 	ifmedia_add(&adapter->media, IFM_ETHER | IFM_AUTO, 0, NULL);
 	ifmedia_set(&adapter->media, IFM_ETHER | IFM_AUTO);
-#ifdef NETGRAPH
-	return (ng_ixgb_tap_attach(adapter));
-#else
+
 	return (0);
-#endif /* ! NETGRAPH */
 }
 
 /********************************************************************
