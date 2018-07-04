@@ -56,7 +56,8 @@ static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = {        \
 }; 																  \
 
 /* 
- * By ng_xxx_tap_attach(9) instantiated nodes are persistent. 
+ * By ng_xxx_tap_attach(9) instantiated 
+ * ng_xxx_tap(4) nodes are persistent. 
  */
 #define NG_TAP_CONSTRUCTOR_DECLARE(device)                            \
 static int                                                            \
@@ -114,9 +115,9 @@ ng_##device##_tap_connect(hook_p hook)                                \
 /* 
  * Receive data encapsulated by mbuf(9) message primitives from 
  * netgraph(4) peer node, reinject upstream and demultiplex by 
- * layer above or forward by e. g.  if_bridge(4).
+ * layer above or forward by e. g. if_bridge(4).
  * 
- * We assumming that FCS was _not_ stripped off.
+ * We are assumming that FCS was _not_ stripped off.
  */
 #define NG_TAP_RCVDATA_DECLARE(device, ctx)                           \
 static int                                                            \
@@ -162,7 +163,7 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item)                   \
 }
 
 /*
- * Process control messages, if any.
+ * Process incomming control messages, if any.
  */
 #define NG_TAP_RCVMSG_DECLARE(device, ctx)                            \
 static int                                                            \
