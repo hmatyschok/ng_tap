@@ -80,82 +80,97 @@ struct ar71xx_cpu_def {
 
 extern struct ar71xx_cpu_def * ar71xx_cpu_ops;
 
-static inline void ar71xx_detect_sys_frequency(void)
+static inline void 
+ar71xx_detect_sys_frequency(void)
 {
 	ar71xx_cpu_ops->detect_sys_frequency();
 }
 
-static inline void ar71xx_device_stop(uint32_t mask)
+static inline void 
+ar71xx_device_stop(uint32_t mask)
 {
 	ar71xx_cpu_ops->ar71xx_chip_device_stop(mask);
 }
 
-static inline void ar71xx_device_start(uint32_t mask)
+static inline void 
+ar71xx_device_start(uint32_t mask)
 {
 	ar71xx_cpu_ops->ar71xx_chip_device_start(mask);
 }
 
-static inline int ar71xx_device_stopped(uint32_t mask)
+static inline int 
+ar71xx_device_stopped(uint32_t mask)
 {
 	return ar71xx_cpu_ops->ar71xx_chip_device_stopped(mask);
 }
 
-static inline void ar71xx_device_set_pll_ge(int unit, int speed, uint32_t pll)
+static inline void 
+ar71xx_device_set_pll_ge(int unit, int speed, uint32_t pll)
 {
 	ar71xx_cpu_ops->ar71xx_chip_set_pll_ge(unit, speed, pll);
 }
 
-static inline void ar71xx_device_set_mii_speed(int unit, int speed)
+static inline void 
+ar71xx_device_set_mii_speed(int unit, int speed)
 {
 	ar71xx_cpu_ops->ar71xx_chip_set_mii_speed(unit, speed);
 }
 
-static inline void ar71xx_device_set_mii_if(int unit, ar71xx_mii_mode mii_cfg)
+static inline void 
+ar71xx_device_set_mii_if(int unit, ar71xx_mii_mode mii_cfg)
 {
 	ar71xx_cpu_ops->ar71xx_chip_set_mii_if(unit, mii_cfg);
 }
 
-static inline void ar71xx_device_flush_ddr(ar71xx_flush_ddr_id_t id)
+static inline void 
+ar71xx_device_flush_ddr(ar71xx_flush_ddr_id_t id)
 {
 	ar71xx_cpu_ops->ar71xx_chip_ddr_flush(id);
 }
 
-static inline uint32_t ar71xx_device_get_eth_pll(unsigned int unit, int speed)
+static inline uint32_t 
+ar71xx_device_get_eth_pll(unsigned int unit, int speed)
 {
 	return (ar71xx_cpu_ops->ar71xx_chip_get_eth_pll(unit, speed));
 }
 
-static inline void ar71xx_init_usb_peripheral(void)
+static inline void 
+ar71xx_init_usb_peripheral(void)
 {
 	ar71xx_cpu_ops->ar71xx_chip_init_usb_peripheral();
 }
 
-static inline void ar71xx_reset_ethernet_switch(void)
+static inline void 
+ar71xx_reset_ethernet_switch(void)
 {
 	if (ar71xx_cpu_ops->ar71xx_chip_reset_ethernet_switch)
 		ar71xx_cpu_ops->ar71xx_chip_reset_ethernet_switch();
 }
 
-static inline void ar71xx_reset_wmac(void)
+static inline void 
+ar71xx_reset_wmac(void)
 {
 	if (ar71xx_cpu_ops->ar71xx_chip_reset_wmac)
 		ar71xx_cpu_ops->ar71xx_chip_reset_wmac();
 }
 
-static inline void ar71xx_init_gmac(void)
+static inline void 
+ar71xx_init_gmac(void)
 {
 	if (ar71xx_cpu_ops->ar71xx_chip_init_gmac)
 		ar71xx_cpu_ops->ar71xx_chip_init_gmac();
 }
 
-static inline void ar71xx_reset_nfc(int active)
+static inline void 
+ar71xx_reset_nfc(int active)
 {
 
 	if (ar71xx_cpu_ops->ar71xx_chip_reset_nfc)
 		ar71xx_cpu_ops->ar71xx_chip_reset_nfc(active);
 }
 
-static inline void ar71xx_gpio_ouput_configure(int gpio, uint8_t func)
+static inline void 
+ar71xx_gpio_ouput_configure(int gpio, uint8_t func)
 {
 	if (ar71xx_cpu_ops->ar71xx_chip_gpio_out_configure)
 		ar71xx_cpu_ops->ar71xx_chip_gpio_out_configure(gpio, func);
@@ -170,12 +185,46 @@ extern uint32_t u_ar71xx_uart_freq;
 extern uint32_t u_ar71xx_wdt_freq;
 extern uint32_t u_ar71xx_mdio_freq;
 
-static inline uint64_t ar71xx_refclk(void) { return u_ar71xx_refclk; }
-static inline uint64_t ar71xx_cpu_freq(void) { return u_ar71xx_cpu_freq; }
-static inline uint64_t ar71xx_ahb_freq(void) { return u_ar71xx_ahb_freq; }
-static inline uint64_t ar71xx_ddr_freq(void) { return u_ar71xx_ddr_freq; }
-static inline uint64_t ar71xx_uart_freq(void) { return u_ar71xx_uart_freq; }
-static inline uint64_t ar71xx_wdt_freq(void) { return u_ar71xx_wdt_freq; }
-static inline uint64_t ar71xx_mdio_freq(void) { return u_ar71xx_mdio_freq; }
+static inline uint64_t 
+ar71xx_refclk(void) 
+{ 
+	return u_ar71xx_refclk; 
+}
 
-#endif
+static inline uint64_t 
+ar71xx_cpu_freq(void) 
+{ 
+	return u_ar71xx_cpu_freq; 
+}
+
+static inline uint64_t 
+ar71xx_ahb_freq(void) 
+{ 
+	return u_ar71xx_ahb_freq; 
+}
+
+static inline uint64_t 
+ar71xx_ddr_freq(void) 
+{ 
+	return u_ar71xx_ddr_freq; 
+}
+
+static inline uint64_t 
+ar71xx_uart_freq(void) 
+{ 
+	return u_ar71xx_uart_freq; 
+}
+
+static inline uint64_t 
+ar71xx_wdt_freq(void) 
+{
+	return u_ar71xx_wdt_freq; 
+}
+
+static inline uint64_t 
+ar71xx_mdio_freq(void) 
+{ 
+	return u_ar71xx_mdio_freq; 
+}
+
+#endif /* __AR71XX_CPUDEF_H__ */
