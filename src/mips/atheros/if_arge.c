@@ -885,6 +885,9 @@ arge_attach(device_t dev)
 	ARGE_WRITE(sc, AR71XX_MAC_STA_ADDR2, (sc->arge_eaddr[0] << 8)
 	    | sc->arge_eaddr[1]);
 
+	/*
+	 * Initialize Watermark, Rx / Tx System and Rx / Tx Fabric Module.
+	 */
 	ARGE_WRITE(sc, AR71XX_MAC_FIFO_CFG0,
 	    FIFO_CFG0_ALL << FIFO_CFG0_ENABLE_SHIFT);
 
@@ -1385,7 +1388,8 @@ arge_init_locked(struct arge_softc *sc)
 {
 	struct ifnet		*ifp = sc->arge_ifp;
 	struct mii_data		*mii;
-
+	uint8_t 	*eaddr;
+	
 	ARGE_LOCK_ASSERT(sc);
 
 	if ((ifp->if_flags & IFF_UP) && 
@@ -1399,7 +1403,8 @@ arge_init_locked(struct arge_softc *sc)
 		arge_stop(sc);
 		return;
 	}
-
+	arge_rxfilter(sc);
+	
 	/* Init tx descriptors. */
 	arge_tx_ring_init(sc);
 
@@ -1414,9 +1419,7 @@ arge_init_locked(struct arge_softc *sc)
 		 */
 		sc->arge_link_status = 1;
 	}
-
-	arge_rxfilter(sc);
-
+	
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 
@@ -2639,7 +2642,6 @@ arge_intr(void *arg)
 	 */
 	ARGE_WRITE(sc, AR71XX_DMA_INTR, DMA_INTR_ALL);
 }
-
 
 static void
 arge_tick(void *xsc)
