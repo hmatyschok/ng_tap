@@ -146,7 +146,7 @@ ar71xx_mac_addr_random_init(unsigned char *dst)
  * Returns 1 if MAC Address exists, 0 if not.
  */
 int
-ar71xx_mac_addr_getenv(device_t dev, unsigned char *addr)
+ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
 {
 	char 	dev_id[32];
 	char * 	mac_addr;

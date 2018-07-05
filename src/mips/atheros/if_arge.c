@@ -677,7 +677,7 @@ arge_attach(device_t dev)
 	 * See if there's a MAC address defined as hint in 
 	 * the environment for this particular device.
 	 */
-	local_mac = ar71xx_mac_addr_getenv(dev, local_macaddr);
+	local_mac = ar71xx_mac_addr_hint_init(dev, local_macaddr);
 
 	/*
 	 * Hardware workarounds.
