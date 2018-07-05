@@ -24,7 +24,31 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+/*
+ * Copyright (c) 2018 Henning Matyschok
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: releng/11.1/sys/mips/atheros/if_arge.c 295880 2016-02-22 09:02:20Z skra $");
 
@@ -642,50 +666,18 @@ arge_attach(device_t dev)
 	long			eeprom_mac_addr = 0;
 	int			miicfg = 0;
 	int			readascii = 0;
-	int			local_mac = 0;
+	int			local_mac;
 	uint8_t			local_macaddr[ETHER_ADDR_LEN];
-	char *			local_macstr;
-	char			devid_str[32];
-	int			count;
 
 	sc = device_get_softc(dev);
 	sc->arge_dev = dev;
 	sc->arge_mac_unit = device_get_unit(dev);
 
 	/*
-	 * See if there's a "board" MAC address hint available for
-	 * this particular device.
-	 *
-	 * This is in the environment - it'd be nice to use the resource_*()
-	 * routines, but at the moment the system is booting, the resource hints
-	 * are set to the 'static' map so they're not pulling from kenv.
+	 * See if there's a MAC address defined as hint in 
+	 * the environment for this particular device.
 	 */
-	snprintf(devid_str, 32, "hint.%s.%d.macaddr",
-	    device_get_name(dev),
-	    device_get_unit(dev));
-	if ((local_macstr = kern_getenv(devid_str)) != NULL) {
-		uint32_t tmpmac[ETHER_ADDR_LEN];
-
-		/* Have a MAC address; should use it */
-		device_printf(dev, "Overriding MAC address from environment: '%s'\n",
-		    local_macstr);
-
-		/* Extract out the MAC address */
-		/* XXX this should all be a generic method */
-		count = sscanf(local_macstr, "%x%*c%x%*c%x%*c%x%*c%x%*c%x",
-		    &tmpmac[0], &tmpmac[1],
-		    &tmpmac[2], &tmpmac[3],
-		    &tmpmac[4], &tmpmac[5]);
-		if (count == 6) {
-			/* Valid! */
-			local_mac = 1;
-			for (i = 0; i < ETHER_ADDR_LEN; i++)
-				local_macaddr[i] = tmpmac[i];
-		}
-		/* Done! */
-		freeenv(local_macstr);
-		local_macstr = NULL;
-	}
+	local_mac = ar71xx_mac_addr_getenv(dev, local_macaddr);
 
 	/*
 	 * Hardware workarounds.
