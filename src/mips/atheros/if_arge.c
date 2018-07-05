@@ -177,6 +177,7 @@ static void arge_dmamap_cb(void *, bus_dma_segment_t *, int, int);
 static int arge_dma_alloc(struct arge_softc *);
 static void arge_dma_free(struct arge_softc *);
 static int arge_newbuf(struct arge_softc *, int);
+static void arge_rxfilter(struct arge_softc *);
 static __inline void arge_fixup_rx(struct mbuf *);
 
 static device_method_t arge_methods[] = {
@@ -1359,7 +1360,6 @@ arge_set_pll(struct arge_softc *sc, int media, int duplex)
 #endif
 }
 
-
 static void
 arge_reset_dma(struct arge_softc *sc)
 {
@@ -1441,6 +1441,8 @@ arge_init_locked(struct arge_softc *sc)
 		 */
 		sc->arge_link_status = 1;
 	}
+
+	arge_rxfilter(sc);
 
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
@@ -1737,9 +1739,8 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0) {
 				if (((ifp->if_flags ^ sc->arge_if_flags)
 				    & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-					/* XXX: handle promisc & multi flags */
+					arge_rxfilter(sc);
 				}
-
 			} else {
 				if (!sc->arge_detach)
 					arge_init_locked(sc);
@@ -1754,7 +1755,10 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		/* XXX: implement SIOCDELMULTI */
+		ARGE_LOCK(sc);
+		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
+			arge_rxfilter(sc);
+		ARGE_UNLOCK(sc);
 		error = 0;
 		break;
 	case SIOCGIFMEDIA:
@@ -2307,6 +2311,35 @@ arge_newbuf(struct arge_softc *sc, int idx)
 	    BUS_DMASYNC_PREWRITE);
 
 	return (0);
+}
+
+/*
+ * Setup promiscous mode or handle mutlicast flags.
+ */
+static void
+arge_rxfilter(struct arge_softc *sc)
+{
+	struct ifnet *ifp;
+	uint32_t rxcfg;
+
+	AGE_LOCK_ASSERT(sc);
+
+	ifp = sc->arge_ifp;
+
+	rxcfg = ARGE_READ(sc, AR71XX_MAC_FIFO_RX_FILTMASK);
+	rxcfg &= ~(FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
+		
+	if ((ifp->if_flags & IFF_BROADCAST) != 0)
+		rxcfg |= FIFO_RX_MASK_BCAST;
+		
+	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
+		if ((ifp->if_flags & IFF_PROMISC) != 0)
+			rxcfg |= (FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
+		if ((ifp->if_flags & IFF_ALLMULTI) != 0)
+			rxcfg |= FIFO_RX_MASK_MCAST;
+	}
+
+	ARGE_WRITE(sc, AR71XX_MAC_FIFO_RX_FILTMASK, rxcfg);
 }
 
 /*
