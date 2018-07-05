@@ -2314,7 +2314,7 @@ arge_newbuf(struct arge_softc *sc, int idx)
 }
 
 /*
- * Setup promiscous mode or handle mutlicast flags.
+ * Setup promiscous mode or handle multicast flags.
  */
 static void
 arge_rxfilter(struct arge_softc *sc)
@@ -2322,7 +2322,7 @@ arge_rxfilter(struct arge_softc *sc)
 	struct ifnet *ifp;
 	uint32_t rxcfg;
 
-	AGE_LOCK_ASSERT(sc);
+	ARGE_LOCK_ASSERT(sc);
 
 	ifp = sc->arge_ifp;
 
