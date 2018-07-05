@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2010 Adrian Chadd
  * All rights reserved.
  *
@@ -25,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: releng/11.1/sys/mips/atheros/ar71xx_chip.c 302190 2016-06-25 04:34:54Z landonf $");
+__FBSDID("$FreeBSD: head/sys/mips/atheros/ar71xx_chip.c 326259 2017-11-27 15:07:26Z pfg $");
 
 #include "opt_ddb.h"
 

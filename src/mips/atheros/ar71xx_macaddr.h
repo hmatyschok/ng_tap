@@ -24,7 +24,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: releng/11.1/sys/mips/atheros/ar71xx_macaddr.h 280798 2015-03-28 23:40:29Z adrian $
+ * $FreeBSD: head/sys/mips/atheros/ar71xx_macaddr.h 280798 2015-03-28 23:40:29Z adrian $
  */
 /*
  * Copyright (c) 2018 Henning Matyschok
@@ -51,17 +51,16 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
- 
 #ifndef	__ATHEROS_AR71XX_MACADDR_H__
 #define	__ATHEROS_AR71XX_MACADDR_H__
 
-extern uint8_t ar71xx_board_mac_addr[ETHER_ADDR_LEN];
+extern	uint8_t ar71xx_board_mac_addr[ETHER_ADDR_LEN];
 
-extern int 	ar71xx_mac_addr_init(unsigned char *dst, 
-	const unsigned char *src, int offset, int is_local);
-extern int 	ar71xx_mac_addr_random_init(unsigned char *dst);
+extern	int ar71xx_mac_addr_init(unsigned char *dst, const unsigned char *src,
+	    int offset, int is_local);
+extern	int ar71xx_mac_addr_random_init(unsigned char *dst);
 extern int 	ar71xx_mac_addr_hint_init(device_t dev, 
 	unsigned char *addr);
 extern int 	ar71xx_mac_addr_eeprom_init(device_t dev, 
-	unsigned char *addr);	
+	unsigned char *addr);
 #endif /* __ATHEROS_AR71XX_MACADDR_H__ */

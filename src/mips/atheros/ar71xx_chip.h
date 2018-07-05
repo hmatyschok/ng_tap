@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2010 Adrian Chadd
  * All rights reserved.
  *
@@ -24,7 +26,7 @@
  * SUCH DAMAGE.
  */
 
-/* $FreeBSD: releng/11.1/sys/mips/atheros/ar71xx_chip.h 234906 2012-05-02 01:21:57Z adrian $ */
+/* $FreeBSD: head/sys/mips/atheros/ar71xx_chip.h 326259 2017-11-27 15:07:26Z pfg $ */
 
 #ifndef	__AR71XX_CHIP_H__
 #define	__AR71XX_CHIP_H__

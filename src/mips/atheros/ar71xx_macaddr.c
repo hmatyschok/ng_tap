@@ -50,13 +50,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: releng/11.1/sys/mips/atheros/ar71xx_macaddr.c 280798 2015-03-28 23:40:29Z adrian $");
+__FBSDID("$FreeBSD: head/sys/mips/atheros/ar71xx_macaddr.c 280798 2015-03-28 23:40:29Z adrian $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/types.h>
 #include <sys/libkern.h>
-#include <sys/bus.h>
 
 #include <net/ethernet.h>
 
@@ -192,7 +191,6 @@ ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
 
 	return (local_mac);
 }
-
 
 /*
  * Some units (eg the TP-Link WR-1043ND) do not have a convenient

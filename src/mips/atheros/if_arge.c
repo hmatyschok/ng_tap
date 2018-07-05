@@ -1,4 +1,6 @@
 /*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
  * Copyright (c) 2009, Oleksandr Tymoshenko
  * All rights reserved.
  *
@@ -50,7 +52,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: releng/11.1/sys/mips/atheros/if_arge.c 295880 2016-02-22 09:02:20Z skra $");
+__FBSDID("$FreeBSD: head/sys/mips/atheros/if_arge.c 326259 2017-11-27 15:07:26Z pfg $");
 
 /*
  * AR71XX gigabit ethernet driver
@@ -132,6 +134,7 @@ typedef enum {
 	ARGE_DBG_ERR	=	0x00000010,
 	ARGE_DBG_RESET	=	0x00000020,
 	ARGE_DBG_PLL	=	0x00000040,
+	ARGE_DBG_ANY	=	0xffffffff,
 } arge_debug_flags;
 
 static const char * arge_miicfg_str[] = {
@@ -146,7 +149,7 @@ static const char * arge_miicfg_str[] = {
 #ifdef ARGE_DEBUG
 #define	ARGEDEBUG(_sc, _m, ...) 					\
 	do {								\
-		if ((_m) & (_sc)->arge_debug)				\
+		if (((_m) & (_sc)->arge_debug) || ((_m) == ARGE_DBG_ANY)) \
 			device_printf((_sc)->arge_dev, __VA_ARGS__);	\
 	} while (0)
 #else
@@ -716,7 +719,7 @@ arge_attach(device_t dev)
 	 */
 	if (local_mac == 0)
 		local_mac = ar71xx_mac_addr_eeprom_init(dev, lla);
-
+		
 	KASSERT(((sc->arge_mac_unit == 0) || (sc->arge_mac_unit == 1)),
 	    ("if_arge: Only MAC0 and MAC1 supported"));
 
@@ -879,15 +882,11 @@ arge_attach(device_t dev)
 	 * set all four addresses to 66-88-aa-cc-dd-ee
 	 */
 	ARGE_WRITE(sc, AR71XX_MAC_STA_ADDR1, (sc->arge_eaddr[2] << 24)
-	    | (sc->arge_eaddr[3] << 16) 
-	    | (sc->arge_eaddr[4] << 8)
+	    | (sc->arge_eaddr[3] << 16) | (sc->arge_eaddr[4] << 8)
 	    | sc->arge_eaddr[5]);
 	ARGE_WRITE(sc, AR71XX_MAC_STA_ADDR2, (sc->arge_eaddr[0] << 8)
 	    | sc->arge_eaddr[1]);
 
-	/*
-	 * Initialize Watermark, Rx / Tx System and Rx / Tx Fabric Module.
-	 */
 	ARGE_WRITE(sc, AR71XX_MAC_FIFO_CFG0,
 	    FIFO_CFG0_ALL << FIFO_CFG0_ENABLE_SHIFT);
 
@@ -1105,7 +1104,7 @@ arge_miibus_readreg(device_t dev, int phy, int reg)
 
 	if (arge_mdio_busy(sc) != 0) {
 		mtx_unlock(&miibus_mtx);
-		ARGEDEBUG(sc, ARGE_DBG_MII, "%s timedout\n", __func__);
+		ARGEDEBUG(sc, ARGE_DBG_ANY, "%s timedout\n", __func__);
 		/* XXX: return ERRNO istead? */
 		return (-1);
 	}
@@ -1142,7 +1141,7 @@ arge_miibus_writereg(device_t dev, int phy, int reg, int data)
 
 	if (arge_mdio_busy(sc) != 0) {
 		mtx_unlock(&miibus_mtx);
-		ARGEDEBUG(sc, ARGE_DBG_MII, "%s timedout\n", __func__);
+		ARGEDEBUG(sc, ARGE_DBG_ANY, "%s timedout\n", __func__);
 		/* XXX: return ERRNO istead? */
 		return (-1);
 	}
@@ -1336,6 +1335,7 @@ arge_set_pll(struct arge_softc *sc, int media, int duplex)
 #endif
 }
 
+
 static void
 arge_reset_dma(struct arge_softc *sc)
 {
@@ -1388,12 +1388,10 @@ arge_init_locked(struct arge_softc *sc)
 {
 	struct ifnet		*ifp = sc->arge_ifp;
 	struct mii_data		*mii;
-	uint8_t 	*eaddr;
-	
+
 	ARGE_LOCK_ASSERT(sc);
 
-	if ((ifp->if_flags & IFF_UP) && 
-		(ifp->if_drv_flags & IFF_DRV_RUNNING))
+	if ((ifp->if_flags & IFF_UP) && (ifp->if_drv_flags & IFF_DRV_RUNNING))
 		return;
 
 	/* Init circular RX list. */
@@ -1413,13 +1411,14 @@ arge_init_locked(struct arge_softc *sc)
 	if (sc->arge_miibus) {
 		mii = device_get_softc(sc->arge_miibus);
 		mii_mediachg(mii);
-	} else {
+	}
+	else {
 		/*
 		 * Sun always shines over multiPHY interface
 		 */
 		sc->arge_link_status = 1;
 	}
-	
+
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
 	ifp->if_drv_flags &= ~IFF_DRV_OACTIVE;
 
@@ -1718,6 +1717,7 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 				    & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
 					arge_rxfilter(sc);
 				}
+
 			} else {
 				if (!sc->arge_detach)
 					arge_init_locked(sc);
@@ -2644,6 +2644,7 @@ arge_intr(void *arg)
 	ARGE_WRITE(sc, AR71XX_DMA_INTR, DMA_INTR_ALL);
 }
 
+
 static void
 arge_tick(void *xsc)
 {
@@ -2704,7 +2705,10 @@ argemdio_attach(device_t dev)
 {
 	struct arge_softc	*sc;
 	int			error = 0;
-
+#ifdef	ARGE_DEBUG
+	struct sysctl_ctx_list *ctx;
+	struct sysctl_oid *tree;
+#endif
 	sc = device_get_softc(dev);
 	sc->arge_dev = dev;
 	sc->arge_mac_unit = device_get_unit(dev);
@@ -2716,6 +2720,14 @@ argemdio_attach(device_t dev)
 		error = ENXIO;
 		goto fail;
 	}
+
+#ifdef	ARGE_DEBUG
+	ctx = device_get_sysctl_ctx(dev);
+	tree = device_get_sysctl_tree(dev);
+	SYSCTL_ADD_INT(ctx, SYSCTL_CHILDREN(tree), OID_AUTO,
+		"debug", CTLFLAG_RW, &sc->arge_debug, 0,
+		"argemdio interface debugging flags");
+#endif
 
 	/* Reset MAC - required for AR71xx MDIO to successfully occur */
 	arge_reset_mac(sc);
@@ -2735,4 +2747,4 @@ argemdio_detach(device_t dev)
 	return (0);
 }
 
-#endif /* ARGE_MDIO */
+#endif
