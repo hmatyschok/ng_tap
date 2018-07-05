@@ -192,3 +192,58 @@ ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
 
 	return (local_mac);
 }
+
+
+/*
+ * Some units (eg the TP-Link WR-1043ND) do not have a convenient
+ * EEPROM location to read the ethernet MAC address from.
+ * OpenWRT simply snaffles it from a fixed location.
+ *
+ * Since multiple units seem to use this feature, include
+ * a method of setting the MAC address based on an flash location
+ * in CPU address space.
+ *
+ * Some vendors have decided to store the mac address as a literal
+ * string of 18 characters in xx:xx:xx:xx:xx:xx format instead of
+ * an array of numbers.  Expose a hint to turn on this conversion
+ * feature via strtol()
+ */
+int 
+ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr)
+{
+	const char *name;
+	int 	unit;
+	long 	eeprom_mac_addr;
+	const char *mac_addr;
+	int		readascii, i;
+	int  	local_mac;
+	 
+	name = device_get_name(dev); 
+	unit = device_get_unit(dev);
+	eepprom_mac_addr = 0;
+	 
+	if (resource_long_value(name, unit, 
+		"eeprommac", &eeprom_mac_addr) == 0) {
+		device_printf(dev, "Overriding MAC from EEPROM\n");
+		
+		mac_addr = (const char *)MIPS_PHYS_TO_KSEG1(eeprom_mac_addr);
+		readascii = 0;
+		
+		if (resource_int_value(name, unit, 
+			"readascii", &readascii) == 0) {
+			device_printf(dev, "Vendor stores MAC in ASCII format\n");
+
+			for (i = 0; i < ETHER_ADDR_LEN; i++) {
+				addr[i] = strtol(&(mac_addr[i*3]), NULL, 16);
+			}
+		} else {
+			for (i = 0; i < ETHER_ADDR_LEN; i++) {
+				addr[i] = mac_addr[i];
+			}
+		}
+		local_mac = 1;
+	} else
+		local_mac = 0;
+
+	return (local_mac);
+}

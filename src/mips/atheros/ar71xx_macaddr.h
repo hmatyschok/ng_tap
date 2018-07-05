@@ -62,4 +62,6 @@ extern int 	ar71xx_mac_addr_init(unsigned char *dst,
 extern int 	ar71xx_mac_addr_random_init(unsigned char *dst);
 extern int 	ar71xx_mac_addr_hint_init(device_t dev, 
 	unsigned char *addr);
+extern int 	ar71xx_mac_addr_eeprom_init(device_t dev, 
+	unsigned char *addr);	
 #endif /* __ATHEROS_AR71XX_MACADDR_H__ */

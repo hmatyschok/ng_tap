@@ -663,11 +663,9 @@ arge_attach(device_t dev)
 	struct arge_softc	*sc;
 	int			error = 0, rid, i;
 	uint32_t		hint;
-	long			eeprom_mac_addr = 0;
 	int			miicfg = 0;
-	int			readascii = 0;
 	int			local_mac;
-	uint8_t			local_macaddr[ETHER_ADDR_LEN];
+	uint8_t		lla[ETHER_ADDR_LEN];
 
 	sc = device_get_softc(dev);
 	sc->arge_dev = dev;
@@ -677,7 +675,7 @@ arge_attach(device_t dev)
 	 * See if there's a MAC address defined as hint in 
 	 * the environment for this particular device.
 	 */
-	local_mac = ar71xx_mac_addr_hint_init(dev, local_macaddr);
+	local_mac = ar71xx_mac_addr_hint_init(dev, lla);
 
 	/*
 	 * Hardware workarounds.
@@ -716,25 +714,8 @@ arge_attach(device_t dev)
 	 * an array of numbers.  Expose a hint to turn on this conversion
 	 * feature via strtol()
 	 */
-	 if (local_mac == 0 && resource_long_value(device_get_name(dev),
-	     device_get_unit(dev), "eeprommac", &eeprom_mac_addr) == 0) {
-		local_mac = 1;
-		int i;
-		const char *mac =
-		    (const char *) MIPS_PHYS_TO_KSEG1(eeprom_mac_addr);
-		device_printf(dev, "Overriding MAC from EEPROM\n");
-		if (resource_int_value(device_get_name(dev), device_get_unit(dev),
-			"readascii", &readascii) == 0) {
-			device_printf(dev, "Vendor stores MAC in ASCII format\n");
-			for (i = 0; i < 6; i++) {
-				local_macaddr[i] = strtol(&(mac[i*3]), NULL, 16);
-			}
-		} else {
-			for (i = 0; i < 6; i++) {
-				local_macaddr[i] = mac[i];
-			}
-		}
-	}
+	if (local_mac == 0)
+		local_mac = ar71xx_mac_addr_eeprom_init(dev, lla);
 
 	KASSERT(((sc->arge_mac_unit == 0) || (sc->arge_mac_unit == 1)),
 	    ("if_arge: Only MAC0 and MAC1 supported"));
@@ -858,7 +839,7 @@ arge_attach(device_t dev)
 	/* If there's a local mac defined, copy that in */
 	if (local_mac == 1) {
 		(void) ar71xx_mac_addr_init(sc->arge_eaddr,
-		    local_macaddr, 0, 0);
+		    lla, 0, 0);
 	} else {
 		/*
 		 * No MAC address configured. Generate the random one.
