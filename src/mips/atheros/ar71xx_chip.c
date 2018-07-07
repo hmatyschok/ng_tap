@@ -150,10 +150,10 @@ ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed)
 	uint32_t val, reg, ctrl;
 
 	switch (unit) {
-	case AR71XX_MII0_CTRL_UNIT_0:
+	case AR71XX_MII_CTRL_UNIT_0:
 		reg = AR71XX_MII0_CTRL;
 		break;
-	case AR71XX_MII0_CTRL_UNIT_1:
+	case AR71XX_MII_CTRL_UNIT_1:
 		reg = AR71XX_MII1_CTRL;
 		break;
 	default:
@@ -163,13 +163,13 @@ ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed)
 	}
 
 	switch (speed) {
-	case AR71XX_MII0_CTRL_SPEED_10:
+	case AR71XX_MII_CTRL_SPEED_10:
 		ctrl = MII_CTRL_SPEED_10;
 		break;
-	case AR71XX_MII0_CTRL_SPEED_100:
+	case AR71XX_MII_CTRL_SPEED_100:
 		ctrl = MII_CTRL_SPEED_100;
 		break;
-	case AR71XX_MII0_CTRL_SPEED_1000:
+	case AR71XX_MII_CTRL_SPEED_1000:
 		ctrl = MII_CTRL_SPEED_1000;
 		break;
 	default:
@@ -190,7 +190,7 @@ ar71xx_chip_set_mii_if(uint32_t unit, uint32_t mii_mode)
 	uint32_t val, reg, mii_if;
 
 	switch (unit) {
-	case 0:
+	case AR71XX_MII_CTRL_UNIT_0:
 		reg = AR71XX_MII0_CTRL;
 		if (mii_mode == AR71XX_MII_MODE_GMII)
 			mii_if = MII0_CTRL_IF_GMII;
@@ -206,7 +206,7 @@ ar71xx_chip_set_mii_if(uint32_t unit, uint32_t mii_mode)
 			return;
 		}
 		break;
-	case 1:
+	case AR71XX_MII_CTRL_UNIT_1:
 		reg = AR71XX_MII1_CTRL;
 		if (mii_mode == AR71XX_MII_MODE_RGMII)
 			mii_if = MII1_CTRL_IF_RGMII;
@@ -236,12 +236,12 @@ ar71xx_chip_set_pll_ge(int unit, int speed, uint32_t pll)
 {
 
 	switch (unit) {
-	case 0:
+	case AR71XX_PLL_CTRL_UNIT_0:
 		ar71xx_write_pll(AR71XX_PLL_SEC_CONFIG,
 		    AR71XX_PLL_ETH_INT0_CLK, pll,
 		    AR71XX_PLL_ETH0_SHIFT);
 		break;
-	case 1:
+	case AR71XX_PLL_CTRL_UNIT_1:
 		ar71xx_write_pll(AR71XX_PLL_SEC_CONFIG,
 		    AR71XX_PLL_ETH_INT1_CLK, pll,
 		    AR71XX_PLL_ETH1_SHIFT);
@@ -282,13 +282,13 @@ ar71xx_chip_get_eth_pll(unsigned int mac, int speed)
 	uint32_t pll;
 
 	switch (speed) {
-	case AR71XX_PLL_ETH_INTX_CLK_10:
+	case AR71XX_PLL_CTRL_CLK_10:
 		pll = PLL_ETH_INT_CLK_10;
 		break;
-	case AR71XX_PLL_ETH_INTX_CLK_100:
+	case AR71XX_PLL_CTRL_CLK_100:
 		pll = PLL_ETH_INT_CLK_100;
 		break;
-	case AR71XX_PLL_ETH_INTX_CLK_1000:
+	case AR71XX_PLL_CTRL_CLK_1000:
 		pll = PLL_ETH_INT_CLK_1000;
 		break;
 	default:

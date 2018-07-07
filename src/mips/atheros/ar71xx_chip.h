@@ -31,16 +31,19 @@
 #ifndef	__AR71XX_CHIP_H__
 #define	__AR71XX_CHIP_H__
 
-#define AR71XX_MII0_CTRL_UNIT_0 	0
-#define AR71XX_MII0_CTRL_UNIT_1 	1
+#define AR71XX_MII_CTRL_UNIT_0 	0
+#define AR71XX_MII_CTRL_UNIT_1 	1
 
-#define AR71XX_MII0_CTRL_SPEED_10 	10
-#define AR71XX_MII0_CTRL_SPEED_100 	100
-#define AR71XX_MII0_CTRL_SPEED_100 	1000
+#define AR71XX_MII_CTRL_SPEED_10 	10
+#define AR71XX_MII_CTRL_SPEED_100 	100
+#define AR71XX_MII_CTRL_SPEED_1000 	1000
 
-#define AR71XX_PLL_ETH_INTX_CLK_10 	10
-#define AR71XX_PLL_ETH_INTX_CLK_100 	100
-#define AR71XX_PLL_ETH_INTX_CLK_1000 	1000
+#define AR71XX_PLL_CTRL_UNIT_0 	0
+#define AR71XX_PLL_CTRL_UNIT_1 	1
+
+#define AR71XX_PLL_CTRL_CLK_10 	10
+#define AR71XX_PLL_CTRL_CLK_100 	100
+#define AR71XX_PLL_CTRL_CLK_1000 	1000
 
 extern struct ar71xx_cpu_def ar71xx_chip_def;
 extern void ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed);
