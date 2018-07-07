@@ -150,10 +150,10 @@ ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed)
 	uint32_t val, reg, ctrl;
 
 	switch (unit) {
-	case 0:
+	case AR71XX_MII0_CTRL_UNIT_0:
 		reg = AR71XX_MII0_CTRL;
 		break;
-	case 1:
+	case AR71XX_MII0_CTRL_UNIT_1:
 		reg = AR71XX_MII1_CTRL;
 		break;
 	default:
@@ -163,13 +163,13 @@ ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed)
 	}
 
 	switch (speed) {
-	case 10:
+	case AR71XX_MII0_CTRL_SPEED_10:
 		ctrl = MII_CTRL_SPEED_10;
 		break;
-	case 100:
+	case AR71XX_MII0_CTRL_SPEED_100:
 		ctrl = MII_CTRL_SPEED_100;
 		break;
-	case 1000:
+	case AR71XX_MII0_CTRL_SPEED_1000:
 		ctrl = MII_CTRL_SPEED_1000;
 		break;
 	default:
@@ -282,13 +282,13 @@ ar71xx_chip_get_eth_pll(unsigned int mac, int speed)
 	uint32_t pll;
 
 	switch (speed) {
-	case 10:
+	case AR71XX_PLL_ETH_INTX_CLK_10:
 		pll = PLL_ETH_INT_CLK_10;
 		break;
-	case 100:
+	case AR71XX_PLL_ETH_INTX_CLK_100:
 		pll = PLL_ETH_INT_CLK_100;
 		break;
-	case 1000:
+	case AR71XX_PLL_ETH_INTX_CLK_1000:
 		pll = PLL_ETH_INT_CLK_1000;
 		break;
 	default:
