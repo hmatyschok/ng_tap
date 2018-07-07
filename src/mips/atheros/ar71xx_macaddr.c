@@ -49,6 +49,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: head/sys/mips/atheros/ar71xx_macaddr.c 280798 2015-03-28 23:40:29Z adrian $");
 
@@ -82,40 +83,40 @@ int
 ar71xx_mac_addr_init(unsigned char *dst, const unsigned char *src,
     int offset, int is_local)
 {
-	int tmp;
+	int t;
 
 	if (dst == NULL || src == NULL)
 		return (-1);
 
 	if (ETHER_IS_MULTICAST(src) != 0)
 		return (-1);
-	
-	tmp = (((uint32_t) src[3]) << 16)
+
+	t = (((uint32_t) src[3]) << 16)
 	    + (((uint32_t) src[4]) << 8)
 	    + ((uint32_t) src[5]);
-/* 
- * Note: this is handles both positive and negative offsets. 
- */
-	tmp += offset;
+
+	/* Note: this is handles both positive and negative offsets */
+	t += offset;
 
 	dst[0] = src[0];
 	dst[1] = src[1];
 	dst[2] = src[2];
-	dst[3] = (tmp >> 16) & 0xff;
-	dst[4] = (tmp >> 8) & 0xff;
-	dst[5] = tmp & 0xff;
+	dst[3] = (t >> 16) & 0xff;
+	dst[4] = (t >> 8) & 0xff;
+	dst[5] = t & 0xff;
 
 	if (is_local)
 		dst[0] |= 0x02;
-/* 
- * Everything's okay. 
- */
+
+	/* Everything's okay */
 	return (0);
 }
 
 /*
- * Initialise a random MAC address for use by 
- * if_arge.c and whatever else requires it.
+ * Initialise a random MAC address for use by if_arge.c and whatever
+ * else requires it.
+ *
+ * Returns 0 on success, -1 on error.
  */
 int
 ar71xx_mac_addr_random_init(unsigned char *dst)
@@ -135,12 +136,7 @@ ar71xx_mac_addr_random_init(unsigned char *dst)
 }
 
 /*
- * See if there's a "board" MAC address hint available for
- * this particular device.
- *
- * This is in the environment - it'd be nice to use the resource_*()
- * routines, but at the moment the system is booting, the resource hints
- * are set to the 'static' map so they're not pulling from kenv.
+ * Initialize MAC Address by hints mechanism.
  * 
  * Returns 1 if MAC Address exists, 0 if not.
  */
@@ -150,40 +146,35 @@ ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
 	char 	dev_id[32];
 	char * 	mac_addr;
 	uint32_t tmp_addr[ETHER_ADDR_LEN];
-	int 	count, i, local_mac;
+	int 	count;
+	int 	i;
+	int 	local_mac;
 	
-	(void)snprintf(dev_id, 32, "hint.%s.%d.macaddr",
-	    device_get_name(dev),
-	    device_get_unit(dev));
+	(void)snprintf(dev_id, 32, "hint.%s.%d.macaddr", 
+	    device_get_name(dev), device_get_unit(dev));
 	
 	if ((mac_addr = kern_getenv(dev_id)) != NULL) {
-/* 
- * Have a MAC address; should use it. 
- */
+		/* Have a MAC address; should use it. */
 		device_printf(dev, "Overriding MAC address "
 			"from environment: '%s'\n", mac_addr);
-/* 
- * Extract out the MAC address. 
- */
+		
+		/* Extract out the MAC address. */
 		count = sscanf(mac_addr, 
 			"%x%*c%x%*c%x%*c%x%*c%x%*c%x",
 				&tmp_addr[0], &tmp_addr[1],
 				&tmp_addr[2], &tmp_addr[3],
 				&tmp_addr[4], &tmp_addr[5]);
 
+		/* Valid! */
 		if (count == ETHER_ADDR_LEN) {
-/* 
- * Valid! 
- */
 			for (i = 0; i < count; i++)
 				addr[i] = tmp_addr[i];
 		
 			local_mac = 1;
 		} else 
 			local_mac = 0;
-/* 
- * Done! 
- */
+
+		/* Done! */
 		freeenv(mac_addr);
 		mac_addr = NULL;
 	} else 
@@ -193,6 +184,8 @@ ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
 }
 
 /*
+ * Initialize MAC Address by reading EEPROM.
+ * 
  * Some units (eg the TP-Link WR-1043ND) do not have a convenient
  * EEPROM location to read the ethernet MAC address from.
  * OpenWRT simply snaffles it from a fixed location.
@@ -204,7 +197,9 @@ ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr)
  * Some vendors have decided to store the mac address as a literal
  * string of 18 characters in xx:xx:xx:xx:xx:xx format instead of
  * an array of numbers.  Expose a hint to turn on this conversion
- * feature via strtol()
+ * feature via strtol().
+ * 
+ * Returns 1 if MAC Address exists, 0 if not.
  */
 int 
 ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr)
@@ -213,7 +208,8 @@ ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr)
 	int 	unit;
 	long 	eeprom_mac_addr;
 	const char *mac_addr;
-	int		readascii, i;
+	int		readascii; 
+	int 	i;
 	int  	local_mac;
 	 
 	name = device_get_name(dev); 
@@ -221,14 +217,14 @@ ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr)
 	eepprom_mac_addr = 0;
 	 
 	if (resource_long_value(name, unit, 
-		"eeprommac", &eeprom_mac_addr) == 0) {
+	    "eeprommac", &eeprom_mac_addr) == 0) {
 		device_printf(dev, "Overriding MAC from EEPROM\n");
 		
 		mac_addr = (const char *)MIPS_PHYS_TO_KSEG1(eeprom_mac_addr);
 		readascii = 0;
 		
 		if (resource_int_value(name, unit, 
-			"readascii", &readascii) == 0) {
+		    "readascii", &readascii) == 0) {
 			device_printf(dev, "Vendor stores MAC in ASCII format\n");
 
 			for (i = 0; i < ETHER_ADDR_LEN; i++) {

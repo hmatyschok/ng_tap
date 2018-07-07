@@ -51,6 +51,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+ 
 #ifndef	__ATHEROS_AR71XX_MACADDR_H__
 #define	__ATHEROS_AR71XX_MACADDR_H__
 
@@ -59,8 +60,6 @@ extern	uint8_t ar71xx_board_mac_addr[ETHER_ADDR_LEN];
 extern	int ar71xx_mac_addr_init(unsigned char *dst, const unsigned char *src,
 	    int offset, int is_local);
 extern	int ar71xx_mac_addr_random_init(unsigned char *dst);
-extern int 	ar71xx_mac_addr_hint_init(device_t dev, 
-	unsigned char *addr);
-extern int 	ar71xx_mac_addr_eeprom_init(device_t dev, 
-	unsigned char *addr);
+extern 	int ar71xx_mac_addr_hint_init(device_t dev, unsigned char *addr);
+extern 	int ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr);
 #endif /* __ATHEROS_AR71XX_MACADDR_H__ */

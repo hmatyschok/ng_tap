@@ -51,6 +51,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+ 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: head/sys/mips/atheros/if_arge.c 326259 2017-11-27 15:07:26Z pfg $");
 
@@ -167,6 +168,7 @@ static void arge_init_locked(struct arge_softc *);
 static void arge_link_task(void *, int);
 static void arge_update_link_locked(struct arge_softc *sc);
 static void arge_set_pll(struct arge_softc *, int, int);
+static void arge_rxfilter(struct arge_softc *sc);
 static int arge_miibus_readreg(device_t, int, int);
 static void arge_miibus_statchg(device_t);
 static int arge_miibus_writereg(device_t, int, int, int);
@@ -204,7 +206,6 @@ static void arge_dmamap_cb(void *, bus_dma_segment_t *, int, int);
 static int arge_dma_alloc(struct arge_softc *);
 static void arge_dma_free(struct arge_softc *);
 static int arge_newbuf(struct arge_softc *, int);
-static void arge_rxfilter(struct arge_softc *);
 static __inline void arge_fixup_rx(struct mbuf *);
 
 static device_method_t arge_methods[] = {
@@ -666,19 +667,25 @@ arge_attach(device_t dev)
 	struct arge_softc	*sc;
 	int			error = 0, rid, i;
 	uint32_t		hint;
+	long			eeprom_mac_addr = 0;
 	int			miicfg = 0;
-	int			local_mac;
-	uint8_t		lla[ETHER_ADDR_LEN];
+	int			readascii;
 
+	uint8_t			local_macaddr[ETHER_ADDR_LEN];
+	
 	sc = device_get_softc(dev);
 	sc->arge_dev = dev;
 	sc->arge_mac_unit = device_get_unit(dev);
 
 	/*
-	 * See if there's a MAC address defined as hint in 
-	 * the environment for this particular device.
+	 * See if there's a "board" MAC address hint available for
+	 * this particular device.
+	 *
+	 * This is in the environment - it'd be nice to use the resource_*()
+	 * routines, but at the moment the system is booting, the resource hints
+	 * are set to the 'static' map so they're not pulling from kenv.
 	 */
-	local_mac = ar71xx_mac_addr_hint_init(dev, lla);
+	local_mac = ar71xx_mac_addr_hint_init(dev, local_macaddr);
 
 	/*
 	 * Hardware workarounds.
@@ -717,9 +724,9 @@ arge_attach(device_t dev)
 	 * an array of numbers.  Expose a hint to turn on this conversion
 	 * feature via strtol()
 	 */
-	if (local_mac == 0)
+	 if (local_mac == 0)
 		local_mac = ar71xx_mac_addr_eeprom_init(dev, lla);
-		
+
 	KASSERT(((sc->arge_mac_unit == 0) || (sc->arge_mac_unit == 1)),
 	    ("if_arge: Only MAC0 and MAC1 supported"));
 
@@ -842,7 +849,7 @@ arge_attach(device_t dev)
 	/* If there's a local mac defined, copy that in */
 	if (local_mac == 1) {
 		(void) ar71xx_mac_addr_init(sc->arge_eaddr,
-		    lla, 0, 0);
+		    local_macaddr, 0, 0);
 	} else {
 		/*
 		 * No MAC address configured. Generate the random one.
@@ -915,13 +922,14 @@ arge_attach(device_t dev)
 			ARGE_WRITE(sc, AR71XX_MAC_FIFO_CFG2, 0x00001fff);
 	}
 
+	/*
+	 * If bit of AR71XX_MAC_FIFO_RX_FILTMATCH does 
+	 * not match with AR71XX_MAC_FIFO_RX_FILTMASK 
+	 * then the frame is dropped. 
+	 */
 	ARGE_WRITE(sc, AR71XX_MAC_FIFO_RX_FILTMATCH,
 	    FIFO_RX_FILTMATCH_DEFAULT);
-/*
- * If bit of AR71XX_MAC_FIFO_RX_FILTMATCH does 
- * not match with AR71XX_MAC_FIFO_RX_FILTMASK 
- * then the frame is dropped. 
- */
+
 	ARGE_WRITE(sc, AR71XX_MAC_FIFO_RX_FILTMASK,
 	    FIFO_RX_FILTMASK_DEFAULT);
 
@@ -1335,6 +1343,34 @@ arge_set_pll(struct arge_softc *sc, int media, int duplex)
 #endif
 }
 
+/*
+ * Enable / disable promiscuous, multicast or broadcast flags.
+ */
+static void
+arge_rxfilter(struct arge_softc *sc)
+{
+	struct ifnet *ifp;
+	uint32_t rxcfg;
+
+	ARGE_LOCK_ASSERT(sc);
+
+	ifp = sc->arge_ifp;
+
+	rxcfg = ARGE_READ(sc, AR71XX_MAC_FIFO_RX_FILTMASK);
+	rxcfg &= ~(FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
+		
+	if ((ifp->if_flags & IFF_BROADCAST) != 0)
+		rxcfg |= FIFO_RX_MASK_BCAST;
+		
+	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
+		if ((ifp->if_flags & IFF_PROMISC) != 0)
+			rxcfg |= (FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
+		if ((ifp->if_flags & IFF_ALLMULTI) != 0)
+			rxcfg |= FIFO_RX_MASK_MCAST;
+	}
+
+	ARGE_WRITE(sc, AR71XX_MAC_FIFO_RX_FILTMASK, rxcfg);
+}
 
 static void
 arge_reset_dma(struct arge_softc *sc)
@@ -1401,8 +1437,10 @@ arge_init_locked(struct arge_softc *sc)
 		arge_stop(sc);
 		return;
 	}
-	arge_rxfilter(sc);
 	
+	/* Setup rx filter */
+	arge_rxfilter(sc);
+
 	/* Init tx descriptors. */
 	arge_tx_ring_init(sc);
 
@@ -1732,10 +1770,7 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ARGE_LOCK(sc);
-		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) != 0)
-			arge_rxfilter(sc);
-		ARGE_UNLOCK(sc);
+		/* XXX: implement SIOCDELMULTI */
 		error = 0;
 		break;
 	case SIOCGIFMEDIA:
@@ -1750,7 +1785,9 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			    command);
 		break;
 	case SIOCSIFCAP:
-		/* XXX: Check other capabilities */
+		ARGE_LOCK(sc);
+		arge_rxfilter(sc);
+		ARGE_UNLOCK(sc);
 #ifdef DEVICE_POLLING
 		mask = ifp->if_capenable ^ ifr->ifr_reqcap;
 		if (mask & IFCAP_POLLING) {
@@ -2288,35 +2325,6 @@ arge_newbuf(struct arge_softc *sc, int idx)
 	    BUS_DMASYNC_PREWRITE);
 
 	return (0);
-}
-
-/*
- * Setup promiscous mode or handle multicast flags.
- */
-static void
-arge_rxfilter(struct arge_softc *sc)
-{
-	struct ifnet *ifp;
-	uint32_t rxcfg;
-
-	ARGE_LOCK_ASSERT(sc);
-
-	ifp = sc->arge_ifp;
-
-	rxcfg = ARGE_READ(sc, AR71XX_MAC_FIFO_RX_FILTMASK);
-	rxcfg &= ~(FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
-		
-	if ((ifp->if_flags & IFF_BROADCAST) != 0)
-		rxcfg |= FIFO_RX_MASK_BCAST;
-		
-	if ((ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI)) != 0) {
-		if ((ifp->if_flags & IFF_PROMISC) != 0)
-			rxcfg |= (FIFO_RX_MASK_BCAST|FIFO_RX_MASK_MCAST);
-		if ((ifp->if_flags & IFF_ALLMULTI) != 0)
-			rxcfg |= FIFO_RX_MASK_MCAST;
-	}
-
-	ARGE_WRITE(sc, AR71XX_MAC_FIFO_RX_FILTMASK, rxcfg);
 }
 
 /*
