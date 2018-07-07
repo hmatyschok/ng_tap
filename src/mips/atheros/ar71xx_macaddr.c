@@ -60,6 +60,8 @@ __FBSDID("$FreeBSD: head/sys/mips/atheros/ar71xx_macaddr.c 280798 2015-03-28 23:
 
 #include <net/ethernet.h>
 
+#include <sys/bus.h>
+
 #include <mips/atheros/ar71xx_macaddr.h>
 
 /*
@@ -214,7 +216,7 @@ ar71xx_mac_addr_eeprom_init(device_t dev, unsigned char *addr)
 	 
 	name = device_get_name(dev); 
 	unit = device_get_unit(dev);
-	eepprom_mac_addr = 0;
+	eeprom_mac_addr = 0;
 	 
 	if (resource_long_value(name, unit, 
 	    "eeprommac", &eeprom_mac_addr) == 0) {

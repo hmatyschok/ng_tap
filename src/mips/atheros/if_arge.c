@@ -667,10 +667,8 @@ arge_attach(device_t dev)
 	struct arge_softc	*sc;
 	int			error = 0, rid, i;
 	uint32_t		hint;
-	long			eeprom_mac_addr = 0;
 	int			miicfg = 0;
-	int			readascii;
-
+	int 		local_mac;
 	uint8_t			local_macaddr[ETHER_ADDR_LEN];
 	
 	sc = device_get_softc(dev);
@@ -725,7 +723,7 @@ arge_attach(device_t dev)
 	 * feature via strtol()
 	 */
 	 if (local_mac == 0)
-		local_mac = ar71xx_mac_addr_eeprom_init(dev, lla);
+		local_mac = ar71xx_mac_addr_eeprom_init(dev, local_macaddr);
 
 	KASSERT(((sc->arge_mac_unit == 0) || (sc->arge_mac_unit == 1)),
 	    ("if_arge: Only MAC0 and MAC1 supported"));
