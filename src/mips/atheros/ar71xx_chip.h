@@ -40,7 +40,7 @@
 
 #define AR71XX_PLL_ETH_INTX_CLK_10 	10
 #define AR71XX_PLL_ETH_INTX_CLK_100 	100
-#define AR71XX_PLL_ETH_INTX_CLK_100 	1000
+#define AR71XX_PLL_ETH_INTX_CLK_1000 	1000
 
 extern struct ar71xx_cpu_def ar71xx_chip_def;
 extern void ar71xx_chip_set_mii_speed(uint32_t unit, uint32_t speed);
