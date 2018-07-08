@@ -150,7 +150,7 @@ ar724x_chip_set_pll_ge(int unit, int speed, uint32_t pll)
 	case AR71XX_GE0:
 		/* XXX TODO */
 		break;
-	case AR71XX_GE0:
+	case AR71XX_GE1:
 		/* XXX TODO */
 		break;
 	default:
