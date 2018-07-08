@@ -193,10 +193,10 @@ static void
 qca955x_chip_set_pll_ge(int unit, int speed, uint32_t pll)
 {
 	switch (unit) {
-	case 0:
+	case AR71XX_GE0:
 		ATH_WRITE_REG(QCA955X_PLL_ETH_XMII_CONTROL_REG, pll);
 		break;
-	case 1:
+	case AR71XX_GE1:
 		ATH_WRITE_REG(QCA955X_PLL_ETH_SGMII_CONTROL_REG, pll);
 		break;
 	default:
@@ -243,13 +243,13 @@ qca955x_chip_get_eth_pll(unsigned int mac, int speed)
 	uint32_t pll;
 
 	switch (speed) {
-	case 10:
+	case AR71XX_GE_SPEED_10:
 		pll = QCA955X_PLL_VAL_10;
 		break;
-	case 100:
+	case AR71XX_GE_SPEED_100:
 		pll = QCA955X_PLL_VAL_100;
 		break;
-	case 1000:
+	case AR71XX_GE_SPEED_1000:
 		pll = QCA955X_PLL_VAL_1000;
 		break;
 	default:
