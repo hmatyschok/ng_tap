@@ -286,13 +286,13 @@ ar71xx_chip_get_eth_pll(unsigned int mac, int speed)
 	uint32_t pll;
 
 	switch (speed) {
-	case AR71XX_GE_PLL_CLK_10:
+	case AR71XX_GE_SPEED_10:
 		pll = PLL_ETH_INT_CLK_10;
 		break;
-	case AR71XX_GE_PLL_CLK_100:
+	case AR71XX_GE_SPEED_100:
 		pll = PLL_ETH_INT_CLK_100;
 		break;
-	case AR71XX_GE_PLL_CLK_1000:
+	case AR71XX_GE_SPEED_1000:
 		pll = PLL_ETH_INT_CLK_1000;
 		break;
 	default:
