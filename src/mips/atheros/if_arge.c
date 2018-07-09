@@ -80,6 +80,7 @@ __FBSDID("$FreeBSD: head/sys/mips/atheros/if_arge.c 326259 2017-11-27 15:07:26Z 
 
 #include <net/if.h>
 #include <net/if_var.h>
+#include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/ethernet.h>
 #include <net/if_types.h>
@@ -846,8 +847,12 @@ arge_attach(device_t dev)
 
 	/* If there's a local mac defined, copy that in */
 	if (local_mac == 1) {
-		(void) ar71xx_mac_addr_init(sc->arge_eaddr,
-		    local_macaddr, 0, 0);
+		if (ar71xx_mac_addr_init(sc->arge_eaddr,
+		    local_macaddr, 0, 0) != 0) {
+		    device_printf(dev,
+			    "Generating random ethernet address.\n");
+			(void) ar71xx_mac_addr_random_init(sc->arge_eaddr);		
+		}
 	} else {
 		/*
 		 * No MAC address configured. Generate the random one.
@@ -1436,6 +1441,20 @@ arge_init_locked(struct arge_softc *sc)
 		return;
 	}
 	
+	/* Setup MAC address */
+	if (ar71xx_mac_addr_init(sc->arge_eaddr, 
+	    IF_LLADDR(ifp), 0, 0) != 0) {
+		device_printf(sc->arge_dev,
+		    "initialization failed: invalid MAC Address\n");
+		arge_stop(sc);	
+	    return;
+	}
+	ARGE_WRITE(sc, AR71XX_MAC_STA_ADDR1, (sc->arge_eaddr[2] << 24)
+	    | (sc->arge_eaddr[3] << 16) | (sc->arge_eaddr[4] << 8)
+	    | sc->arge_eaddr[5]);
+	ARGE_WRITE(sc, AR71XX_MAC_STA_ADDR2, (sc->arge_eaddr[0] << 8)
+	    | sc->arge_eaddr[1]);
+	
 	/* Setup rx filter */
 	arge_rxfilter(sc);
 
@@ -1768,7 +1787,9 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		/* XXX: implement SIOCDELMULTI */
+		ARGE_LOCK(sc);
+		arge_rxfilter(sc);
+		ARGE_UNLOCK(sc);		
 		error = 0;
 		break;
 	case SIOCGIFMEDIA:
@@ -1783,9 +1804,7 @@ arge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			    command);
 		break;
 	case SIOCSIFCAP:
-		ARGE_LOCK(sc);
-		arge_rxfilter(sc);
-		ARGE_UNLOCK(sc);
+		/* XXX: Check other capabilities */
 #ifdef DEVICE_POLLING
 		mask = ifp->if_capenable ^ ifr->ifr_reqcap;
 		if (mask & IFCAP_POLLING) {
