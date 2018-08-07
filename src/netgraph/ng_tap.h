@@ -321,6 +321,8 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp)                \
 {                                                                     \
 	int error;                                                    \
                                                                       \
+    (*mp)->m_flags |= M_HASFCS;                                   \
+                                                                      \
 	NG_SEND_DATA_ONLY(error, hook, *mp); /* sets *mp = NULL */    \
 }
 
