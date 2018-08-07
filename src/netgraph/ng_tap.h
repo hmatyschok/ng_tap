@@ -31,7 +31,7 @@
 #define NGM_TAP_COOKIE		 1524849212	/* date -u +'%s' */
 
 /* Hook names */
-#define NG_TAP_HOOK_UPSTREAM 	"upstream" /* upstream data flow */
+#define NG_TAP_HOOK_RAW 	"raw" /* upstream data flow */
 
 /* Generic netgraph(4) control messages */
 enum {
@@ -89,7 +89,7 @@ ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
 	struct ifnet *ifp = sc->device##_ifp;                         \
                                                                   \
-	if (strcmp(name, NG_TAP_HOOK_UPSTREAM) != 0)                  \
+	if (strcmp(name, NG_TAP_HOOK_RAW) != 0)                       \
 		return (EPFNOSUPPORT);                                \
                                                                   \
 	if (sc->device##_tap_hook != NULL)                            \
