@@ -116,8 +116,6 @@ ng_##device##_tap_connect(hook_p hook)                                \
  * Receive data encapsulated by mbuf(9) message primitives from 
  * netgraph(4) peer node, reinject upstream and demultiplex by 
  * layer above or forward by e. g. if_bridge(4).
- * 
- * We are assumming that FCS was _not_ stripped off.
  */
 #define NG_TAP_RCVDATA_DECLARE(device, ctx)                           \
 static int                                                            \
@@ -126,40 +124,12 @@ ng_##device##_tap_rcvdata(hook_p hook, item_p item)                   \
 	const node_p node = NG_HOOK_NODE(hook);                       \
 	struct ctx *sc = NG_NODE_PRIVATE(node);                       \
  	struct ifnet *ifp = sc->device##_ifp;                         \
-	struct mbuf *m0, *m, *t;                                          \
+	struct mbuf *m;                                          \
                                                                       \
-	NGI_GET_M(item, m0);                                          \
+	NGI_GET_M(item, m);                                          \
 	NG_FREE_ITEM(item);                                           \
                                                                       \
-	if (m0->m_pkthdr.rcvif != ifp) {                              \
-		m_freem(m0);                                          \
-		return (EINVAL);                                      \
-	}                                                             \
-                                                                      \
-	if (m0->m_pkthdr.len < sizeof(struct ether_header)) {         \
-		m_freem(m0);                                          \
-		return (EINVAL);                                      \
-	}                                                             \
-                                                                      \
-	if (m0->m_len < sizeof(struct ether_header)) {                \
-		m0 = m_pullup(m0, sizeof(struct ether_header));       \
-		if (m0 == NULL)                                       \
-			return (ENOBUFS);                             \
-	}                                                             \
-	t = m = m0;                                                       \
-                                                                      \
-	while (t->m_next != NULL)                                     \
-		t = t->m_next;                                        \
-                                                                      \
-	if (t->m_len == ETHER_CRC_LEN) {                              \
-		while (m->m_next != t)                                \
-			m = m->m_next;                                \
-                                                                      \
-		m->m_next = NULL;                                     \
-		m_freem(t);                                           \
-	}                                                             \
-                                                                      \
-    return (if_input(ifp, m0));                                   \
+    return (if_input(ifp, m));                                   \
 }
 
 /*
@@ -343,48 +313,15 @@ ng_##device##_tap_detach(struct ctx *sc)                              \
 }
 
 /*
- * Cut off the trailer from Ethernet frame, encapsulate FCS 
- * by newly allocated mbuf(9), append and forward the chain 
- * to the netgraph(4) protocol domain(9).
+ * Forward the chain to the netgraph(4) protocol domain(9).
  */
 #define NG_TAP_INPUT_DECLARE(device) 							      \
 void 													              \
 ng_##device##_tap_input(hook_p hook, struct mbuf **mp)                \
 {                                                                     \
-	struct mbuf *t, *m, *m0;                                      \
-	int off, error;                                               \
+	int error;                                                    \
                                                                       \
-	if ((m0 = *mp) != NULL) {                                     \
-		off = m0->m_pkthdr.len - ETHER_CRC_LEN;               \
-                                                                      \
-		if ((m = m_split(m0, off, M_NOWAIT)) != NULL) {       \
-/*                                                                    \
- * Ensures that FCS won't share same cluster mbuf(9), if any.         \
- */                                                                   \
- 			if (!M_WRITABLE(m)) {                         \
-				t = m_dup(m, M_NOWAIT);               \
-				m_freem(m);                           \
-			} else                                        \
-				t = m;                                \
-                                                                      \
-			if (t != NULL) {                              \
-				m = m0;                               \
-                                                                      \
-				while (m->m_next != NULL)             \
-					m = m->m_next;                \
-                                                                      \
-				m->m_next = t;                        \
-/*                                                                    \
- * Sets m0 = NULL.                                                    \
- */                                                                   \
-				NG_SEND_DATA_ONLY(error, hook, m0);   \
-			} else {                                      \
-				m_freem(m0);                          \
-				m0 = NULL;                            \
-			}                                             \
-		}                                                     \
-		*mp = m0;                                             \
-	}                                                             \
+	NG_SEND_DATA_ONLY(error, hook, *mp); /* sets *mp = NULL */    \
 }
 
 /*
