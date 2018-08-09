@@ -50,6 +50,8 @@ typedef struct ng_fcs_priv *nfp_p;
 
 /* Private methods */
 static struct mbuf *	ng_fcs_get_trailer(struct mbuf *m0); 
+static int 	ng_fcs_append_crc(struct mbuf *n, struct mbuf *m);
+static int 	ng_fcs_append_eh(struct mbuf *n, struct mbuf *m);
 
 static int	ng_fcs_rcv_raw(hook_p node, item_p item);
 static int	ng_fcs_rcv_log(hook_p node, item_p item);
@@ -208,7 +210,7 @@ ng_fcs_get_trailer(struct mbuf *m0)
 }
 
 /*
- * Append CRC-23 FCS.
+ * Append CRC-32 FCS.
  */
 static int 
 ng_fcs_append_crc(struct mbuf *n, struct mbuf *m)
