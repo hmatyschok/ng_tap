@@ -55,13 +55,13 @@
  * 
  *  (c) ether_header := ( ether_dst, ether_src, ether_type )  
  * 
- * for further processing by syslog(9). 
+ * for further processing by syslogd(8). 
  */
 struct ng_log_msg {
 	uint32_t 	nlm_fcs0;
 	uint32_t 	nlm_fcs1;
 	struct ether_header 	nlm_eh;
-};
+} __packed;
 
 /* Private data */
 struct ng_log_priv {
@@ -72,6 +72,7 @@ typedef struct ng_log_priv *nlp_p;
 
 /* Public methods */
 static ng_constructor_t 	ng_log_constructor;
+static ng_newhook_t 	ng_log_newhook;
 static ng_rcvmsg_t 	ng_log_rcvmsg;
 static ng_rcvdata_t 	ng_log_rcvdata;
 static ng_disconnect_t 	ng_log_disconnect;
@@ -82,6 +83,7 @@ static struct ng_type ng_log_type = {
 	.version =	NG_ABI_VERSION,
 	.name =		NG_LOG_NODE_TYPE,
 	.constructor =	ng_log_constructor,
+	.newhook =	ng_log_newhook,
 	.rcvmsg =	ng_log_rcvmsg,
 	.rcvdata =	ng_log_rcvdata,
 	.disconnect =	ng_log_disconnect,

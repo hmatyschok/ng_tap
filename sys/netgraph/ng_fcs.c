@@ -58,6 +58,7 @@ static int	ng_fcs_rcv_log(hook_p node, item_p item);
 
 /* Public methods */
 static ng_constructor_t 	ng_fcs_constructor;
+static ng_newhook_t 	ng_fcs_newhook;
 static ng_rcvmsg_t 	ng_fcs_rcvmsg;
 static ng_rcvdata_t 	ng_fcs_rcvdata;
 static ng_disconnect_t 	ng_fcs_disconnect;
@@ -68,6 +69,7 @@ static struct ng_type ng_fcs_type = {
 	.version =	NG_ABI_VERSION,
 	.name =		NG_FCS_NODE_TYPE,
 	.constructor =	ng_fcs_constructor,
+	.newhook =	ng_fcs_newhook, 
 	.rcvmsg =	ng_fcs_rcvmsg,
 	.rcvdata =	ng_fcs_rcvdata,
 	.disconnect =	ng_fcs_disconnect,
