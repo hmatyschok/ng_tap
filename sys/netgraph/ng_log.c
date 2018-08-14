@@ -111,22 +111,24 @@ static int
 ng_log_newhook(node_p node, hook_p hook, const char *name)
 {
 	const nlp_p nlp = NG_NODE_PRIVATE(node);
+	int error;
 	
-	if (nlp->nlp_log != NULL)
-		return (EISCONN);
+	if (nlp->nlp_log != NULL) {
+		error = EISCONN;
+		goto out;
+	}
 	
-	if (strcmp(name, NG_LOG_HOOK_LOG) != 0) 	
+	if (strcmp(name, NG_LOG_HOOK_LOG) != 0) { 	
 		nlp->nlp_log = hook;
-	else 
-		return (EPFNOSUPPORT);
-		
-	return (0);
+		error = 0;
+	} else 
+		error = EPFNOSUPPORT;
+out:		
+	return (error);
 }
 
 /*
- * Receive control message. 
- * 
- * But there is nothing to do here, we just bounce it back as a reply.
+ * Receive control message and bounce it back as a reply.
  */
 static int
 ng_log_rcvmsg(node_p node, item_p item, hook_p lasthook)
@@ -142,7 +144,7 @@ ng_log_rcvmsg(node_p node, item_p item, hook_p lasthook)
 }
 
 /*
- * Extract information from message primitive and pass it to syslog(9).
+ * Extract information from message primitive and pass it to syslogd(8).
  */
 static int
 ng_log_rcvdata(hook_p hook, item_p item)
@@ -196,7 +198,7 @@ ng_log_disconnect(hook_p hook)
 }
 
 /*
- * Do local shutdown processing..
+ * Do local shutdown processing.
  */
 static int
 ng_log_shutdown(node_p node)

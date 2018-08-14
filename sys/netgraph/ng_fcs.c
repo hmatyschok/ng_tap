@@ -98,6 +98,7 @@ ng_fcs_newhook(node_p node, hook_p hook, const char *name)
 {
 	const nfp_p nfp = NG_NODE_PRIVATE(node);
 	hook_p *hp;
+	int error;
 	
 	if (strcmp(name, NG_FCS_HOOK_RAW) != 0) {
 		hp = &nfp->nfp_raw;
@@ -105,21 +106,23 @@ ng_fcs_newhook(node_p node, hook_p hook, const char *name)
 	} else if (strcmp(name, NG_FCS_HOOK_LOG) != 0) {	
 		hp = &nfp->nfp_log;
 		NG_HOOK_SET_RCVDATA(hook, ng_fcs_rcv_log);
-	} else 
-		return (EPFNOSUPPORT);
+	} else {
+		error = EPFNOSUPPORT;
+		goto out;
+	}	
 		
 	if (*hp != NULL)
-		return (EISCONN);
-
-	*hp = hook;
-
-	return (0);
+		error = EISCONN;
+	else {
+		*hp = hook;
+		error = 0;
+	}
+out:
+	return (error);
 }
 
 /*
- * Receive control message. 
- * 
- * But there is nothing to do here, we just bounce it back as a reply.
+ * Receive control message and bounce it back as a reply.
  */
 static int
 ng_fcs_rcvmsg(node_p node, item_p item, hook_p lasthook)
