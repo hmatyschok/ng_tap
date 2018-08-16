@@ -93,6 +93,13 @@ ng_fcs_constructor(node_p node)
 	return (0);
 }
 
+/*
+ * Interconnect with peer node by referring its hook denotes SAP.
+ * 
+ *  (a) Accessing the raw data stream from peered ng_tap(4) node.
+ * 
+ *  (b) Forwarding from raw data stream collected information. 
+ */
 static int
 ng_fcs_newhook(node_p node, hook_p hook, const char *name)
 {
@@ -215,7 +222,7 @@ ng_fcs_get_trailer(struct mbuf *m0)
 }
 
 /*
- * Append CRC-32 FCS.
+ * Append re-calculated CRC-32 based FCS.
  */
 static int 
 ng_fcs_append_crc(struct mbuf *n, struct mbuf *m)
@@ -230,7 +237,7 @@ ng_fcs_append_crc(struct mbuf *n, struct mbuf *m)
 }
 
 /*
- * Append Ethernet PCI.
+ * Append Ethernet Protocol Control Information.
  */
 static int 
 ng_fcs_append_eh(struct mbuf *n, struct mbuf *m)
@@ -243,7 +250,7 @@ ng_fcs_append_eh(struct mbuf *n, struct mbuf *m)
 }
 
 /*
- * Receive data and re-inject upstream.
+ * Receive data, unlink its FCS from trailer and re-inject upstream.
  */
 static int
 ng_fcs_rcv_raw(hook_p hook, item_p item)

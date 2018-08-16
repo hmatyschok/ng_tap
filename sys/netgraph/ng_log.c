@@ -107,6 +107,9 @@ ng_log_constructor(node_p node)
 	return (0);
 }
 
+/*
+ * Interconnect with peer node by referring its hook denotes SAP.
+ */
 static int
 ng_log_newhook(node_p node, hook_p hook, const char *name)
 {
