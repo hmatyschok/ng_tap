@@ -52,8 +52,8 @@ static const struct ng_cmdlist ng_##device##_tap_cmdlist[] = {        \
 	  NULL,                                                        \
 	  &ng_parse_string_type,                                       \
 	},                                                             \
-	{ 0 } 														   \
-}; 																   \
+	{ 0 }                                                          \
+};
 
 /* 
  * By ng_xxx_tap_attach(9) instantiated 
@@ -76,7 +76,7 @@ ng_##device##_tap_shutdown(node_p node)                               \
 	if ((node->nd_flags & NGF_REALLY_DIE) == 0)                    \
 		node->nd_flags &= ~NGF_INVALID;                         \
                                                                       \
-	return (0);                                                       \
+	return (0);                                                    \
 }
 
 /*
@@ -88,7 +88,7 @@ ng_##device##_tap_newhook(node_p node, hook_p hook, const char *name) \
 {                                                                     \
 	struct ctx *sc = NG_NODE_PRIVATE(node);                        \
 	struct ifnet *ifp = sc->device##_ifp;                          \
-                                                                   \
+                                                                      \
 	if (strcmp(name, NG_TAP_HOOK_RAW) != 0)                        \
 		return (EPFNOSUPPORT);                                  \
                                                                       \
