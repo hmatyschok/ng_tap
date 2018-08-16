@@ -3336,13 +3336,7 @@ msk_rxeof(struct msk_if_softc *sc_if, uint32_t status, uint32_t control,
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-		if (sc_if->msk_tap_hook != NULL) {
-			ng_msk_tap_input(sc_if->msk_tap_hook, &m);
-			if (m != NULL) {
-				(*ifp->if_input)(ifp, m);
-			}
-		} else
-			(*ifp->if_input)(ifp, m);	
+		NG_TAP_INPUT(msk, sc_if, ifp, m);
 #else
 		(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */
