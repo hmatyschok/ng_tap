@@ -121,7 +121,7 @@ ng_log_newhook(node_p node, hook_p hook, const char *name)
 		goto out;
 	}
 	
-	if (strcmp(name, NG_LOG_HOOK_LOG) != 0) { 	
+	if (strcmp(name, NG_LOG_HOOK_LOG) == 0) { 	
 		nlp->nlp_log = hook;
 		error = 0;
 	} else 

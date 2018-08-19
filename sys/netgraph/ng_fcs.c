@@ -107,10 +107,10 @@ ng_fcs_newhook(node_p node, hook_p hook, const char *name)
 	hook_p *hp;
 	int error;
 	
-	if (strcmp(name, NG_FCS_HOOK_RAW) != 0) {
+	if (strcmp(name, NG_FCS_HOOK_RAW) == 0) {
 		hp = &nfp->nfp_raw;
 		NG_HOOK_SET_RCVDATA(hook, ng_fcs_rcv_raw);
-	} else if (strcmp(name, NG_FCS_HOOK_LOG) != 0) {	
+	} else if (strcmp(name, NG_FCS_HOOK_LOG) == 0) {	
 		hp = &nfp->nfp_log;
 		NG_HOOK_SET_RCVDATA(hook, ng_fcs_rcv_log);
 	} else {
