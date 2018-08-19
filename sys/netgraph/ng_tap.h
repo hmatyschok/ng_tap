@@ -259,8 +259,7 @@ ng_##device##_tap_attach(struct ctx *sc)                              \
 	}                                                              \
 	ifp = sc->device##_ifp;                                        \
                                                                       \
-	(void)snprintf(name, IFNAMSIZ, "%s%d",                         \
-		ng_##device##_tap_type.name, ifp->if_index);            \
+	(void)snprintf(name, IFNAMSIZ, "%s%s", ifp->if_xname, "_tap"); \
                                                                       \
 	error = ng_name_node(sc->device##_tap_node, name);             \
 	if (error != 0) {                                              \
