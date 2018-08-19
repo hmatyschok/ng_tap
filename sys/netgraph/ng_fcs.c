@@ -303,12 +303,12 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 		goto bad1;
 	}
 	
-	if (ng_fcs_append_crc(n, m) != 0) {
+	if (ng_fcs_append_crc(n, m) == 0) {
 		error = ENOBUFS;
 		goto bad2;
 	}
 	
-	if (ng_fcs_append_eh(n, m) != 0) {
+	if (ng_fcs_append_eh(n, m) == 0) {
 		error = ENOBUFS;
 		goto bad2;
 	}
@@ -316,7 +316,7 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 /*
  * Re-inject upstream.
  */		
-	NG_FWD_NEW_DATA(error, item, hook, m);
+	NG_FWD_NEW_DATA(error, item, nfp->nfp_raw, m);
 out:	
 	return (error);
 bad2:
