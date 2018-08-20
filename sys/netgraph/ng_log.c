@@ -34,9 +34,12 @@
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
+#include <sys/socket.h>
 #include <sys/syslog.h>
 
 #include <net/ethernet.h>
+#include <net/if.h>
+#include <net/if_var.h>
 
 #include <netgraph/ng_message.h>
 #include <netgraph/netgraph.h>
@@ -45,22 +48,22 @@
 /* 
  * Tuple holds necessary information 
  * 
- *  t := ( fcs0 , fcs1, ether_header )
+ *  t := ( ether_header, fcs1, fcs0 )
  * 
  * where
  * 
- *  (a) fcs0 := maps to trailer 
+ *  (a) ether_header := ( ether_dst, ether_src, ether_type ) 
  * 
  *  (b) fcs1 := recalculated CRC-32 based FCS
  * 
- *  (c) ether_header := ( ether_dst, ether_src, ether_type )  
+ *  (c) fcs0 := maps to trailer
  * 
  * for further processing by syslogd(8). 
  */
 struct ng_log_msg {
-	uint32_t 	nlm_fcs0;
-	uint32_t 	nlm_fcs1;
 	struct ether_header 	nlm_eh;
+	uint32_t 	nlm_fcs1;
+	uint32_t 	nlm_fcs0;
 } __packed;
 
 /* Private data */
@@ -154,9 +157,15 @@ ng_log_rcvdata(hook_p hook, item_p item)
 {
 	int error = 0;
 	struct mbuf *m;
+	struct ifnet *ifp;
 	struct ng_log_msg *nlm;
 
 	NGI_GET_M(item, m);
+    
+	if ((ifp = m->m_pkthdr.rcvif) == NULL) {
+		error = EINVAL;
+		goto out1;
+	}
     
 	if (m->m_pkthdr.len < sizeof(struct ng_log_msg)) {
 		error = EINVAL;
@@ -173,8 +182,9 @@ ng_log_rcvdata(hook_p hook, item_p item)
 	
 	nlm = mtod(m, struct ng_log_msg *);
 	
-	log(LOG_NOTICE, "fcs0: 0x%08x, fcs1: 0x%08x, ether_src: %6D\n", 
-		nlm->nlm_fcs0, nlm->nlm_fcs1, nlm->nlm_eh.ether_shost, ":");	
+	log(LOG_NOTICE, "%s: ether_src: %6D, fcs1: 0x%08x, fcs0: 0x%08x\n", 
+		ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
+		ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
 out1:
 	NG_FREE_M(m);
 out:
