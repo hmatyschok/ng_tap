@@ -50,10 +50,8 @@ typedef struct ng_fcs_priv *nfp_p;
 
 /* Private methods */
 static struct mbuf *	ng_fcs_get_trailer(struct mbuf *m0); 
-static struct mbuf * 	ng_fcs_prepend_crc(struct mbuf *m0, 
-	struct mbuf *m);
-static struct mbuf * 	ng_fcs_prepend_eh(struct mbuf *m0, 
-	struct mbuf *m);
+static int 	ng_fcs_append_crc(struct mbuf *m0, struct mbuf *m);
+static int 	ng_fcs_append_eh(struct mbuf *m0, struct mbuf *m);
 
 static int	ng_fcs_rcv_raw(hook_p node, item_p item);
 static int	ng_fcs_rcv_log(hook_p node, item_p item);
@@ -226,40 +224,31 @@ ng_fcs_get_trailer(struct mbuf *m0)
 /*
  * Append re-calculated CRC-32 based FCS.
  */
-static struct mbuf * 
-ng_fcs_prepend_crc(struct mbuf *m0, struct mbuf *m)
+static int 
+ng_fcs_append_crc(struct mbuf *m0, struct mbuf *m)
 {
 	char buf[ETHER_MAX_LEN_JUMBO];
 	uint32_t val;
-	uint32_t *crc;
 	
 	m_copydata(m, 0, m->m_pkthdr.len, buf);
 	
 	val = ether_crc32_le(buf, m->m_pkthdr.len);
 	val = ~val;
-
-	M_PREPEND(m0, ETHER_CRC_LEN, M_NOWAIT);
-	if (m0 != NULL) {
-		crc = mtod(m0, uint32_t *);
-		(void)memcpy(crc, &val, ETHER_CRC_LEN); 
-	}
-	return (m0);
+	
+	return (m_append(m0, ETHER_CRC_LEN, (void *)&val));
 }
 
 /*
  * Append Ethernet Protocol Control Information.
  */
-static struct mbuf * 
-ng_fcs_prepend_eh(struct mbuf *m0, struct mbuf *m)
+static int 
+ng_fcs_append_eh(struct mbuf *m0, struct mbuf *m)
 {
-	struct ether_header *eh;
+	struct ether_header eh;
 	
-	M_PREPEND(m0, sizeof(struct ether_header), M_NOWAIT);
-	if (m0 != NULL) {
-		eh = mtod(m0, struct ether_header *);
-		m_copydata(m, 0, sizeof(struct ether_header), (caddr_t)eh);
-	}
-	return (m0);
+	m_copydata(m, 0, sizeof(struct ether_header), (caddr_t)&eh);
+	
+	return (m_append(m0, sizeof(struct ether_header), (void *)&eh));
 }
 
 /*
@@ -299,15 +288,15 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 /*
  * Collect neccessary data 
  * 
- *  t := ( ether_header, fcs1, fcs0 )
+ *  t := ( fcs0, fcs1, ether_header )
  * 
  * where
  * 
- *  (a) ether_header := ( ether_dst, ether_src, ether_type ) 
+ *  (a) fcs0 := maps to trailer 
  * 
  *  (b) fcs1 := recalculated CRC-32 based FCS
  * 
- *  (c) fcs0 := maps to trailer  
+ *  (c) ether_header := ( ether_dst, ether_src, ether_type )  
  * 
  * and tx for further processing.
  */	
@@ -316,12 +305,12 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 		goto bad1;
 	}
 	
-	if ((n = ng_fcs_prepend_crc(n, m)) == NULL) {
+	if (ng_fcs_append_crc(n, m) == 0) {
 		error = ENOBUFS;
 		goto bad2;
 	}
 	
-	if ((n = ng_fcs_prepend_eh(n, m)) == NULL) {
+	if (ng_fcs_append_eh(n, m) == 0) {
 		error = ENOBUFS;
 		goto bad2;
 	}

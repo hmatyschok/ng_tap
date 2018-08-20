@@ -48,22 +48,22 @@
 /* 
  * Tuple holds necessary information 
  * 
- *  t := ( ether_header, fcs1, fcs0 )
+ *  t := ( fcs0, fcs1, ether_header )
  * 
  * where
  * 
- *  (a) ether_header := ( ether_dst, ether_src, ether_type ) 
+ *  (a) fcs0 := maps to trailer 
  * 
  *  (b) fcs1 := recalculated CRC-32 based FCS
  * 
- *  (c) fcs0 := maps to trailer
+ *  (c) ether_header := ( ether_dst, ether_src, ether_type )  
  * 
  * for further processing by syslogd(8). 
  */
 struct ng_log_msg {
-	struct ether_header 	nlm_eh;
-	uint32_t 	nlm_fcs1;
 	uint32_t 	nlm_fcs0;
+	uint32_t 	nlm_fcs1;
+	struct ether_header 	nlm_eh;
 } __packed;
 
 /* Private data */
@@ -182,13 +182,16 @@ ng_log_rcvdata(hook_p hook, item_p item)
 	
 	nlm = mtod(m, struct ng_log_msg *);
 	
-	log(LOG_NOTICE, "%s: ether_src: %6D, fcs1: 0x%08x, fcs0: 0x%08x\n", 
-		ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
-		ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
+	if (nlm->nlm_fcs0 != nlm->nlm_fcs1) 
+		log(LOG_NOTICE, "%s: ether_src: %6D, "
+			"fcs1: 0x%08x, fcs0: 0x%08x\n", 
+			ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
+			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
 out1:
 	NG_FREE_M(m);
 out:
 	NG_FREE_ITEM(item);
+	
 	return (error);
 }
 
