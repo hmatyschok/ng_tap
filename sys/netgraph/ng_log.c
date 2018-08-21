@@ -300,9 +300,11 @@ ng_log_rcv_ingress(hook_p hook, item_p item)
 	nlm = mtod(m, struct ng_log_msg *);
 	
 	if ((nlp->nlp_eval)(nlm)) { 
-		log(LOG_NOTICE, "%s: ether_src: %6D, "
-			"fcs1: 0x%08x, fcs0: 0x%08x\n", 
-			ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
+		log(LOG_NOTICE, "%s: ether_dst: %6D, ether_src: %6D,"
+			" ether_type: 0x%04x, fcs1: 0x%08x, fcs: 0x%08x\n", 
+			ifp->if_xname, nlm->nlm_eh.ether_dhost, ":", 
+			nlm->nlm_eh.ether_shost, ":", 
+			ntohs(nlm->nlm_eh.ether_type),
 			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
 /* 
  * Discard mbuf(9) and set m = NULL automatically. 
