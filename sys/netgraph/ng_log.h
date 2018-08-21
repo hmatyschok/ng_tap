@@ -32,6 +32,7 @@
 #define NGM_LOG_COOKIE		1533980695
 
 /* Hook names */
-#define NG_LOG_HOOK_LOG 	"log"
+#define NG_LOG_HOOK_INGRESS 	"ingress"
+#define NG_LOG_HOOK_EGRESS 	"egress"
 
 #endif /* _NETGRAPH_NG_LOG_H_ */

@@ -262,27 +262,28 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 	int error;
 
 	NGI_GET_M(item, m);
+    NG_FREE_ITEM(item);
     
 	if ((m->m_flags & M_HASFCS) == 0) {
 		error = EINVAL;
-		goto bad1;	
+		goto bad;	
 	}
        
 	if (m->m_pkthdr.len > ETHER_MAX_LEN_JUMBO) {
 		error = EINVAL;
-		goto bad1;
+		goto bad;
 	}   
         
 	if (m->m_pkthdr.len < sizeof(struct ether_header)) {
 		error = EINVAL;
-		goto bad1;
+		goto bad;
 	}
  
 	if (m->m_len < sizeof(struct ether_header)) {
 		m = m_pullup(m, sizeof(struct ether_header));
 		if (m == NULL) {
 			error = ENOBUFS;
-			goto bad;
+			goto out;
 		}
 	}
 /*
@@ -302,36 +303,34 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
  */	
 	if ((n = ng_fcs_get_trailer(m)) == NULL) {
 		error = ENOBUFS;
-		goto bad1;
+		goto bad;
 	}
 	
 	if (ng_fcs_append_crc(n, m) == 0) {
 		error = ENOBUFS;
-		goto bad2;
+		goto bad1;
 	}
 	
 	if (ng_fcs_append_eh(n, m) == 0) {
 		error = ENOBUFS;
-		goto bad2;
+		goto bad1;
 	}
 	NG_SEND_DATA_ONLY(error, nfp->nfp_log, n);
 /*
  * Re-inject upstream.
  */		
-	NG_FWD_NEW_DATA(error, item, nfp->nfp_raw, m);
+	NG_SEND_DATA_ONLY(error, nfp->nfp_raw, m);
 out:	
 	return (error);
-bad2:
-	NG_FREE_M(n);
 bad1:
-	NG_FREE_M(m);
+	NG_FREE_M(n);
 bad:
-	NG_FREE_ITEM(item);
+	NG_FREE_M(m);
 	goto out;
 }
 
 /*
- * Data sink.
+ * Discarding data sink ensures unidirectional dataflow.
  */
 static int
 ng_fcs_rcv_log(hook_p hook, item_p item)

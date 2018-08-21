@@ -26,7 +26,7 @@
 
 /*
  * This netgraph(4) node operates in conjunction 
- * with ng_tap(4) and ng_fcs(4) node as data sink.
+ * with ng_tap(4) and ng_log(4) node as data sink.
  */
 
 #include <sys/param.h>
@@ -69,9 +69,14 @@ struct ng_log_msg {
 /* Private data */
 struct ng_log_priv {
 	node_p	nlp_node;		/* back pointer to node */
-	hook_p 	nlp_log;
+	hook_p 	nlp_ingress; 		/* incomming messages */
+	hook_p 	nlp_egress; 		/* forwarding messages */
 };
 typedef struct ng_log_priv *nlp_p;
+
+/* Private methods */
+static int	ng_log_rcv_ingress(hook_p node, item_p item);
+static int	ng_log_rcv_egress(hook_p node, item_p item);
 
 /* Public methods */
 static ng_constructor_t 	ng_log_constructor;
@@ -117,18 +122,26 @@ static int
 ng_log_newhook(node_p node, hook_p hook, const char *name)
 {
 	const nlp_p nlp = NG_NODE_PRIVATE(node);
+	hook_p *hp;
 	int error;
 	
-	if (nlp->nlp_log != NULL) {
-		error = EISCONN;
-		goto out;
-	}
-	
-	if (strcmp(name, NG_LOG_HOOK_LOG) == 0) { 	
-		nlp->nlp_log = hook;
-		error = 0;
-	} else 
+	if (strcmp(name, NG_LOG_HOOK_INGRESS) == 0) {
+		hp = &nlp->nlp_ingress;
+		NG_HOOK_SET_RCVDATA(hook, ng_log_rcv_ingress);
+	} else if (strcmp(name, NG_LOG_HOOK_EGRESS) == 0) {	
+		hp = &nlp->nlp_egress;
+		NG_HOOK_SET_RCVDATA(hook, ng_log_rcv_egress);
+	} else {
 		error = EPFNOSUPPORT;
+		goto out;
+	}	
+		
+	if (*hp != NULL)
+		error = EISCONN;
+	else {
+		*hp = hook;
+		error = 0;
+	}
 out:		
 	return (error);
 }
@@ -150,49 +163,14 @@ ng_log_rcvmsg(node_p node, item_p item, hook_p lasthook)
 }
 
 /*
- * Extract information from message primitive and pass it to syslogd(8).
+ * Discarding data sink.
  */
 static int
 ng_log_rcvdata(hook_p hook, item_p item)
 {
-	int error = 0;
-	struct mbuf *m;
-	struct ifnet *ifp;
-	struct ng_log_msg *nlm;
-
-	NGI_GET_M(item, m);
-    
-	if ((ifp = m->m_pkthdr.rcvif) == NULL) {
-		error = EINVAL;
-		goto out1;
-	}
-    
-	if (m->m_pkthdr.len < sizeof(struct ng_log_msg)) {
-		error = EINVAL;
-		goto out1;
-	}
- 
-	if (m->m_len < sizeof(struct ng_log_msg)) {
-		m = m_pullup(m, sizeof(struct ng_log_msg));
-		if (m == NULL) {
-			error = ENOBUFS;
-			goto out;
-		}
-	}
-	
-	nlm = mtod(m, struct ng_log_msg *);
-	
-	if (nlm->nlm_fcs0 != nlm->nlm_fcs1) 
-		log(LOG_NOTICE, "%s: ether_src: %6D, "
-			"fcs1: 0x%08x, fcs0: 0x%08x\n", 
-			ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
-			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
-out1:
-	NG_FREE_M(m);
-out:
 	NG_FREE_ITEM(item);
 	
-	return (error);
+	return (0);
 }
 
 /*
@@ -203,8 +181,10 @@ ng_log_disconnect(hook_p hook)
 {
 	const nlp_p nlp = NG_NODE_PRIVATE(NG_HOOK_NODE(hook));
 
-	if (nlp->nlp_log == hook)
-		nlp->nlp_log = NULL;
+	if (nlp->nlp_ingress == hook)
+		nlp->nlp_ingress = NULL;
+	else if (nlp->nlp_egress == hook)
+		nlp->nlp_egress = NULL;
 	
 	if ((NG_NODE_NUMHOOKS(NG_HOOK_NODE(hook)) == 0)
 	&& (NG_NODE_IS_VALID(NG_HOOK_NODE(hook)))) {
@@ -225,5 +205,70 @@ ng_log_shutdown(node_p node)
 	NG_NODE_UNREF(nlp->nlp_node);
 	free(nlp, M_NETGRAPH);
 
+	return (0);
+}
+
+/*
+ * Extract information from MPI, pass it to syslogd(8) and forward MPI 
+ * to peer node in netgraph(4) communication domain(9), if requested.
+ */
+static int
+ng_log_rcv_ingress(hook_p hook, item_p item)
+{
+	const nlp_p nlp = NG_NODE_PRIVATE(NG_HOOK_NODE(hook));
+	int error = 0;
+	struct mbuf *m;
+	struct ifnet *ifp;
+	struct ng_log_msg *nlm;
+
+	NGI_GET_M(item, m);
+    NG_FREE_ITEM(item);
+    
+	if ((ifp = m->m_pkthdr.rcvif) == NULL) {
+		error = EINVAL;
+		goto bad;
+	}
+    
+	if (m->m_pkthdr.len < sizeof(struct ng_log_msg)) {
+		error = EINVAL;
+		goto bad;
+	}
+ 
+	if (m->m_len < sizeof(struct ng_log_msg)) {
+		m = m_pullup(m, sizeof(struct ng_log_msg));
+		if (m == NULL) {
+			error = ENOBUFS;
+			goto out;
+		}
+	}
+	
+	nlm = mtod(m, struct ng_log_msg *);
+	
+	if (nlm->nlm_fcs0 != nlm->nlm_fcs1) { 
+		log(LOG_NOTICE, "%s: ether_src: %6D, "
+			"fcs1: 0x%08x, fcs0: 0x%08x\n", 
+			ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
+			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
+/* 
+ * Discards mbuf(9) and sets m = NULL automatically. 
+ */
+		NG_SEND_DATA_ONLY(error, nlp->nlp_egress, m); 
+	} else
+		NG_FREE_M(m);
+out:	
+	return (error);
+bad:
+	NG_FREE_M(m);	
+	goto out;
+}
+
+/*
+ * Data sink, discards any incoming MPIs.
+ */
+static int
+ng_log_rcv_egress(hook_p hook, item_p item)
+{
+	NG_FREE_ITEM(item);
+	
 	return (0);
 }
