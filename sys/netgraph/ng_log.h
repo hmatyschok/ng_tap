@@ -35,4 +35,11 @@
 #define NG_LOG_HOOK_INGRESS 	"ingress"
 #define NG_LOG_HOOK_EGRESS 	"egress"
 
+/* Netgraph control messages */
+enum {
+	NGM_LOG_ALL = 1,
+	NGM_LOG_ERR,
+	NGM_LOG_NONE,
+};
+
 #endif /* _NETGRAPH_NG_LOG_H_ */

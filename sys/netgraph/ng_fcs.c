@@ -262,7 +262,7 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 	int error;
 
 	NGI_GET_M(item, m);
-    NG_FREE_ITEM(item);
+	NG_FREE_ITEM(item);
     
 	if ((m->m_flags & M_HASFCS) == 0) {
 		error = EINVAL;

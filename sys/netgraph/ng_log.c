@@ -71,10 +71,15 @@ struct ng_log_priv {
 	node_p	nlp_node;		/* back pointer to node */
 	hook_p 	nlp_ingress; 		/* incomming messages */
 	hook_p 	nlp_egress; 		/* forwarding messages */
+	int (*nlp_eval)(struct ng_log_msg *nlm);
 };
 typedef struct ng_log_priv *nlp_p;
 
 /* Private methods */
+static int 	ng_log_all(struct ng_log_msg *nlm);
+static int 	ng_log_err(struct ng_log_msg *nlm);
+static int 	ng_log_none(struct ng_log_msg *nlm);
+
 static int	ng_log_rcv_ingress(hook_p node, item_p item);
 static int	ng_log_rcv_egress(hook_p node, item_p item);
 
@@ -86,6 +91,32 @@ static ng_rcvdata_t 	ng_log_rcvdata;
 static ng_disconnect_t 	ng_log_disconnect;
 static ng_shutdown_t 	ng_log_shutdown;
 
+/* List of commands and how to convert arguments to/from ASCII */
+static const struct ng_cmdlist ng_log_cmdlist[] = {
+	{
+	  NGM_LOG_COOKIE,
+	  NGM_LOG_ALL,
+	  "logall",
+	  NULL,
+	  NULL
+	},
+	{
+	  NGM_LOG_COOKIE,
+	  NGM_LOG_ERR,
+	  "logerr",
+	  NULL,
+	  NULL
+	},
+	{
+	  NGM_LOG_COOKIE,
+	  NGM_LOG_NONE,
+	  "lognone",
+	  NULL,
+	  NULL
+	},
+	{ 0 }
+};
+
 /* Netgraph type */
 static struct ng_type ng_log_type = {
 	.version =	NG_ABI_VERSION,
@@ -96,6 +127,7 @@ static struct ng_type ng_log_type = {
 	.rcvdata =	ng_log_rcvdata,
 	.disconnect =	ng_log_disconnect,
 	.shutdown = 	ng_log_shutdown,
+	.cmdlist =	ng_log_cmdlist,
 };
 NETGRAPH_INIT(syslog, &ng_log_type);
 
@@ -108,9 +140,10 @@ ng_log_constructor(node_p node)
 	nlp_p nlp;
 
 	nlp = malloc(sizeof(*nlp), M_NETGRAPH, M_WAITOK|M_ZERO);
-
+	
 	NG_NODE_SET_PRIVATE(node, nlp);
 	nlp->nlp_node = node;
+	nlp->nlp_eval = ng_log_none;
 
 	return (0);
 }
@@ -152,14 +185,37 @@ out:
 static int
 ng_log_rcvmsg(node_p node, item_p item, hook_p lasthook)
 {
+	const nlp_p nlp = NG_NODE_PRIVATE(node);
+	struct ng_mesg *resp = NULL;
+	int error = 0;
 	struct ng_mesg *msg;
-	int error;
 
 	NGI_GET_MSG(item, msg);
-	msg->header.flags |= NGF_RESP;
-	NG_RESPOND_MSG(error, node, item, msg);
-
-	return (0);
+	switch (msg->header.typecookie) {
+	case NGM_LOG_COOKIE:
+		switch (msg->header.cmd) {
+		case NGM_LOG_ALL:
+			nlp->nlp_eval = ng_log_all;
+			break;
+		case NGM_LOG_ERR:
+			nlp->nlp_eval = ng_log_err;
+			break;
+		case NGM_LOG_NONE:
+			nlp->nlp_eval = ng_log_none;
+			break;	
+		default:
+			error = EINVAL;
+			break;
+		}
+		break;
+	default:
+		error = EINVAL;
+		break;
+	}
+	NG_RESPOND_MSG(error, node, item, resp);
+	NG_FREE_MSG(msg);
+	
+	return (error);
 }
 
 /*
@@ -222,7 +278,7 @@ ng_log_rcv_ingress(hook_p hook, item_p item)
 	struct ng_log_msg *nlm;
 
 	NGI_GET_M(item, m);
-    NG_FREE_ITEM(item);
+	NG_FREE_ITEM(item);
     
 	if ((ifp = m->m_pkthdr.rcvif) == NULL) {
 		error = EINVAL;
@@ -241,16 +297,15 @@ ng_log_rcv_ingress(hook_p hook, item_p item)
 			goto out;
 		}
 	}
-	
 	nlm = mtod(m, struct ng_log_msg *);
 	
-	if (nlm->nlm_fcs0 != nlm->nlm_fcs1) { 
+	if ((nlp->nlp_eval)(nlm)) { 
 		log(LOG_NOTICE, "%s: ether_src: %6D, "
 			"fcs1: 0x%08x, fcs0: 0x%08x\n", 
 			ifp->if_xname, nlm->nlm_eh.ether_shost, ":",
 			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
 /* 
- * Discards mbuf(9) and sets m = NULL automatically. 
+ * Discard mbuf(9) and set m = NULL automatically. 
  */
 		NG_SEND_DATA_ONLY(error, nlp->nlp_egress, m); 
 	} else
@@ -270,5 +325,32 @@ ng_log_rcv_egress(hook_p hook, item_p item)
 {
 	NG_FREE_ITEM(item);
 	
+	return (0);
+}
+
+/*
+ * Pass all.
+ */
+static int
+ng_log_all(struct ng_log_msg *nlm __unused)
+{
+	return (1);
+}
+
+/*
+ * Pass Ethernet PCI from errornous frames.
+ */
+static int
+ng_log_err(struct ng_log_msg *nlm)
+{
+	return (nlm->nlm_fcs0 != nlm->nlm_fcs1);
+}
+
+/*
+ * Discard all.
+ */
+static int
+ng_log_none(struct ng_log_msg *nlm __unused)
+{
 	return (0);
 }
