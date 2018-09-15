@@ -207,7 +207,7 @@ ng_fcs_get_trailer(struct mbuf *m0)
 /*
  * Ensure that FCS won't share same cluster mbuf(9), if any.
  */
- 		if (!M_WRITABLE(m)) { 
+ 		if (M_WRITABLE(m) == 0) { 
 			t = m_dup(m, M_NOWAIT);
 			m_freem(m);
 		} else
@@ -239,7 +239,7 @@ ng_fcs_append_crc(struct mbuf *m0, struct mbuf *m)
 }
 
 /*
- * Append Ethernet Protocol Control Information.
+ * Append Ethernet header [PCI].
  */
 static int 
 ng_fcs_append_eh(struct mbuf *m0, struct mbuf *m)
@@ -315,7 +315,11 @@ ng_fcs_rcv_raw(hook_p hook, item_p item)
 		error = ENOBUFS;
 		goto bad1;
 	}
-	NG_SEND_DATA_ONLY(error, nfp->nfp_log, n);
+	
+	if (nfp->nfp_log != NULL)
+		NG_SEND_DATA_ONLY(error, nfp->nfp_log, n);
+	else
+		NG_FREE_M(n);
 /*
  * Re-inject upstream.
  */		

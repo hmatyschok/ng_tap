@@ -486,7 +486,7 @@ vr_set_filter(struct vr_softc *sc)
 	rxfilt = CSR_READ_1(sc, VR_RXCFG);
 	rxfilt &= ~(VR_RXCFG_RX_PROMISC 
 		| VR_RXCFG_RX_BROAD 
-		| VR_RXCFG_RX_MULTI);
+		| VR_RXCFG_RX_MULTI);	
 #ifdef NETGRAPH
 	if (sc->vr_tap_hook != NULL)
 		rxfilt |= VR_RXCFG_RX_ERRPKTS;
@@ -1354,7 +1354,9 @@ vr_rxeof(struct vr_softc *sc)
 	ifp = sc->vr_ifp;
 	cons = sc->vr_cdata.vr_rx_cons;
 	rx_npkts = 0;
-
+/*
+ * If hook is connected, don not trim off CRC.
+ */
 #ifdef NETGRAPH	
 	ether_crc_len = (sc->vr_tap_hook != NULL) ? 0 : ETHER_CRC_LEN;
 #endif 	/* !NETGRAPH */

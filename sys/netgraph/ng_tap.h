@@ -217,13 +217,21 @@ int 	ng_##device##_tap_attach(struct ctx *);
 #define NG_TAP_DETACH_DECLARE_FN(device, ctx)                         \
 void 	ng_##device##_tap_detach(struct ctx *);
 
-#define NG_TAP_INPUT_DECLARE_FN(device) 							  \
-void 	ng_##device##_tap_input(hook_p, struct mbuf **);
+#define NG_TAP_INPUT_DECLARE_FN(device, ctx) 							  \
+void 	ng_##device##_tap_input(struct ctx *sc, struct mbuf **);
 
 /* 
  * Attach instance of xxx(4) NIC with netgraph(4) 
  * node. It is called once for each physical card 
- * during xxx_attach(9). 
+ * during xxx_attach(9).
+ * 
+ *  (a) Register its associated node type.
+ * 
+ *  (b) Create and initialize its associated node.
+ * 
+ *  (c) Set its associated name.
+ * 
+ *  (d) Bind its software context as private data.
  * 
  * This is effectively ng_xxx_tap_constructor(9).
  */
@@ -313,17 +321,18 @@ ng_##device##_tap_detach(struct ctx *sc)                              \
 }
 
 /*
- * Forward the chain to the netgraph(4) protocol domain(9).
+ * Forward mbuf(9) chain to the netgraph(4) protocol domain(9).
  */
-#define NG_TAP_INPUT_DECLARE(device) 							      \
+#define NG_TAP_INPUT_DECLARE(device, ctx) 							      \
 void 													              \
-ng_##device##_tap_input(hook_p hook, struct mbuf **mp)                \
+ng_##device##_tap_input(struct ctx *sc, struct mbuf **mp)                \
 {                                                                     \
 	int error;                                                     \
                                                                       \
     (*mp)->m_flags |= M_HASFCS;                                    \
                                                                       \
-	NG_SEND_DATA_ONLY(error, hook, *mp); /* sets *mp = NULL */     \
+    if (sc->device##_tap_hook != NULL)                             \
+		NG_SEND_DATA_ONLY(error, sc->device##_tap_hook, *mp);      \
 }
 
 /*
@@ -341,17 +350,17 @@ ng_##device##_tap_input(hook_p hook, struct mbuf **mp)                \
 	NG_TAP_TYPE_DECLARE(device, str) 							   \
 	NG_TAP_ATTACH_DECLARE_FN(device, ctx)                          \
 	NG_TAP_DETACH_DECLARE_FN(device, ctx) 		                   \
-	NG_TAP_INPUT_DECLARE_FN(device)                                \
+	NG_TAP_INPUT_DECLARE_FN(device, ctx)                           \
 	NG_TAP_ATTACH_DECLARE(device, ctx) 							   \
 	NG_TAP_DETACH_DECLARE(device, ctx)							   \
-	NG_TAP_INPUT_DECLARE(device)
+	NG_TAP_INPUT_DECLARE(device, ctx)
 
 /*
  * Handoff into netgraph(4) protocol domain(9).
  */
 #define NG_TAP_INPUT(device, _sc, _ifp, _m) 	do {                  \
 	if ((_sc)->device##_tap_hook != NULL) {                        \
-		ng_##device##_tap_input((_sc)->device##_tap_hook, &(_m)); \
+		ng_##device##_tap_input(_sc, &(_m)); \
 		if ((_m) != NULL) {                                     \
 			(*(_ifp)->if_input)(_ifp, _m);                   \
 		}                                                       \

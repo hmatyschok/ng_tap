@@ -306,10 +306,11 @@ ng_log_rcv_ingress(hook_p hook, item_p item)
 			nlm->nlm_eh.ether_shost, ":", 
 			ntohs(nlm->nlm_eh.ether_type),
 			ntohl(nlm->nlm_fcs1), ntohl(nlm->nlm_fcs0));
-/* 
- * Discard mbuf(9) and set m = NULL automatically. 
- */
-		NG_SEND_DATA_ONLY(error, nlp->nlp_egress, m); 
+
+		if (nlp->nlp_egress != NULL)
+			NG_SEND_DATA_ONLY(error, nlp->nlp_egress, m); 
+		else
+			NG_FREE_M(m);
 	} else
 		NG_FREE_M(m);
 out:	
