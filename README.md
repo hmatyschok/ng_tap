@@ -1,5 +1,5 @@
 <pre><code> 
-ng_xxx_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
+ng_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
 ====================================================================
 
  Basic implementation of a SAP for Network TAP as extension for  

@@ -1150,13 +1150,7 @@ hme_read(struct hme_softc *sc, int ix, int len, u_int32_t flags)
  * Very evil stuff comes here.. 
  */		
 #ifdef NETGRAPH
-		if (sc->hme_tap_hook != NULL) {
-			ng_hme_tap_input(sc->hme_tap_hook, &m);
-			if (m != NULL) {
-				(*ifp->if_input)(ifp, m);
-			}
-		} else
-			(*ifp->if_input)(ifp, m);	
+		NG_TAP_INPUT(hme, sc, ifp, m);
 #else
 		(*ifp->if_input)(ifp, m);
 #endif /* ! NETGRAPH */	
@@ -1735,15 +1729,7 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 	 * Turn off promiscuous mode, promiscuous group mode (all multicast),
 	 * and hash filter.  Depending on the case, the right bit will be
 	 * enabled.
-	 */
-#ifdef NETGRAPH
-	if (reenable) {
-		if (sc->hme_tap_hook != NULL)
-			macc |= HME_MAC_RXCFG_DCRCS;
-		else 
-			macc &= ~(HME_MAC_RXCFG_DCRCS);
-	}
-#endif /* NETGRAPH */		
+	 */	
 	macc &= ~(HME_MAC_RXCFG_PGRP | HME_MAC_RXCFG_PMISC);
 
 	/*
@@ -1766,6 +1752,14 @@ hme_setladrf(struct hme_softc *sc, int reenable)
 		macc |= HME_MAC_RXCFG_ENABLE;
 	else
 		macc &= ~HME_MAC_RXCFG_ENABLE;
+
+	/* Disable CRC stripping, if hook is connected. */
+#ifdef NETGRAPH
+	if (sc->hme_tap_hook != NULL)
+		macc |= HME_MAC_RXCFG_DCRCS;
+	else 
+		macc &= ~(HME_MAC_RXCFG_DCRCS);
+#endif /* NETGRAPH */
 
 	if ((ifp->if_flags & IFF_PROMISC) != 0) {
 		macc |= HME_MAC_RXCFG_PMISC;	
