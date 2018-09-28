@@ -1,10 +1,10 @@
 <pre><code> 
-ng_tap(4) - Service Access Point for Terminal AccesS Point [TAP]
-====================================================================
+ng_tap(4) - Service Access Point [SAP] for Terminal AccesS Point [TAP]
+======================================================================
 
  Basic implementation of a SAP for Network TAP as extension for  
  the Implementation of device-driver for Ethernet NICs those are
- capable receiving and passing the trailer an Ethernet frames.
+ capable receiving and passing the trailer of Ethernet frames.
       
  The code-base of the device driver in sys/dev was extented by 
  utilizing the netgraph(4) kernel programmers interface. It's 
